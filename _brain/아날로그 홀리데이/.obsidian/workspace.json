@@ -1,0 +1,213 @@
+{
+  "main": {
+    "id": "4e3e382043a06bba",
+    "type": "split",
+    "children": [
+      {
+        "id": "5715af2a162f5673",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "766387bea6699145",
+            "type": "leaf",
+            "state": {
+              "type": "empty",
+              "state": {},
+              "icon": "lucide-file",
+              "title": "새 탭"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "3e73939567c2a3b4",
+    "type": "split",
+    "children": [
+      {
+        "id": "5d2d8fdf870f01b2",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "48647d13f675e8fe",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "파일 탐색기"
+            }
+          },
+          {
+            "id": "cc376fa6606be4bf",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "검색"
+            }
+          },
+          {
+            "id": "7e0bf260f27b177c",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "북마크"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "d3079effd29aa5db",
+    "type": "split",
+    "children": [
+      {
+        "id": "0729f6148f269e7b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "970c574b4cc26b4d",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "백링크"
+            }
+          },
+          {
+            "id": "bad983e1f704f9eb",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "나가는 링크"
+            }
+          },
+          {
+            "id": "5f382cd8c2d198e4",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "태그"
+            }
+          },
+          {
+            "id": "63d0dfe9394c6afc",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "모든 속성"
+            }
+          },
+          {
+            "id": "fbc68c8ffe3fff90",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "개요"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:빠른 전환기 열기": false,
+      "graph:그래프 뷰 열기": false,
+      "canvas:새 캔버스 만들기": false,
+      "daily-notes:오늘의 일일 노트 열기": false,
+      "templates:템플릿 삽입": false,
+      "command-palette:명령어 팔레트 열기": false,
+      "bases:새 베이스 생성하기": false
+    }
+  },
+  "active": "766387bea6699145",
+  "lastOpenFiles": [
+    "하니/from-geo_지오-하니-mz-아날로그-여행-트렌드-및-물류-가이드.md",
+    "하니/from-geo_지오-하니-부산-배송-d-3-조정-및-카메라-물류-대응.md",
+    "하니/from-geo_지오-하니-부산-d-3-출고-및-필름카메라-물류-전략.md",
+    "하니/프라이버시-경계선-원칙.md",
+    "지오/from-geo_지오-하니-부산-배송-d-3-조정-및-카메라-물류-대응.md",
+    "지오/from-geo_지오-하니-부산-d-3-출고-및-필름카메라-물류-전략.md",
+    "지오/from-geo_지오-하니-mz-아날로그-여행-트렌드-및-물류-가이드.md",
+    "리나의 뇌.md",
+    "알렉스/from-noah_노아-알렉스-감성-분석-모델-공유-및-브리핑.md",
+    "알렉스/from-noah_노아-알렉스-감성-분석-데이터-및-브리핑-공유.md",
+    "알렉스/from-noah_노아-알렉스-감성-분석-데이터-공유.md",
+    "알렉스/from-noah_노아-알렉스-감성-분석-결과-및-브리핑-공유.md",
+    "지오/패키징-파손율-저감-연구.md",
+    "지오/재고-회전율-기반-발주-모델.md",
+    "지오/반품-프로세스-sla-기준.md",
+    "지오/물류-리스크-매트릭스.md",
+    "지오/라스트마일-배송-최적화-공식.md",
+    "지오/from-hani_하니-지오-여름-캠페인-물류-연동.md",
+    "지오/from-hani_하니-지오-여름-캠페인-결과-및-수요-데이터.md",
+    "지오",
+    "하니/시즌별-콘텐츠-캘린더-설계.md",
+    "하니/스토리텔링-3막-구조-법칙.md",
+    "하니/감성-키워드-밀도-최적화.md",
+    "하니/ugc-큐레이션-프레임워크.md",
+    "하니/from-hani_하니-지오-여름-캠페인-물류-연동.md",
+    "하니/from-hani_하니-지오-여름-캠페인-결과-및-수요-데이터.md",
+    "하니",
+    "리나/옴니채널-cs-응답-속도-기준.md",
+    "리나",
+    "노아",
+    "알렉스"
+  ]
+}

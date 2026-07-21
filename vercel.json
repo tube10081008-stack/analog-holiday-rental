@@ -1,0 +1,24 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-report",
+      "schedule": "0 0 * * 1-5"
+    },
+    {
+      "path": "/api/cron/evening-report",
+      "schedule": "0 9 * * 1-5"
+    },
+    {
+      "path": "/api/cron/weekly-reflection",
+      "schedule": "0 0 * * 1"
+    },
+    {
+      "path": "/api/agent-brain?action=study&agent=all&count=2",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/agent-brain?action=self-study&agent=all",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "cameras": [
+    {
+      "id": "cam_kodak_m35",
+      "name": "코닥 M35 / M38",
+      "category": "camera",
+      "mood": "쨍하고 따뜻한 옐로우 톤, 청춘 영화 감성",
+      "totalStock": 1,
+      "available": 1,
+      "reserved": []
+    },
+    {
+      "id": "cam_yashica_mf1",
+      "name": "야시카 MF-1",
+      "category": "camera",
+      "mood": "미니멀, 조용한 사색, 차분한 톤",
+      "totalStock": 1,
+      "available": 1,
+      "reserved": []
+    },
+    {
+      "id": "cam_ilford_sprite",
+      "name": "일포드 스프라이트 35-II",
+      "category": "camera",
+      "mood": "흑백 클래식, 우아한 낭만, 빈티지 무드",
+      "totalStock": 1,
+      "available": 1,
+      "reserved": []
+    },
+    {
+      "id": "cam_fotocola_35mm",
+      "name": "포토콜라 35mm",
+      "category": "camera",
+      "mood": "팝컬러, 힙하고 즐거운 분위기, 파티 감성",
+      "totalStock": 1,
+      "available": 1,
+      "reserved": []
+    },
+    {
+      "id": "cam_agfa_analogue",
+      "name": "아그파포토 아날로그 35mm",
+      "category": "camera",
+      "mood": "포근한 오후, 따뜻한 어스톤, 감성적인 일상",
+      "totalStock": 1,
+      "available": 1,
+      "reserved": []
+    },
+    {
+      "id": "cam_okio_35mm",
+      "name": "오키오 다회용 카메라",
+      "category": "camera",
+      "mood": "강렬한 플래시, 밤거리 감성, 힙한 노이즈",
+      "totalStock": 1,
+      "available": 1,
+      "reserved": []
+    }
+  ],
+  "addToBox": [
+    {
+      "id": "add-to-box-kit",
+      "name": "여행 소품 박스",
+      "totalStock": 12,
+      "reserved": []
+    }
+  ],
+  "lastUpdated": "2026-04-12T07:01:40.585Z"
+}

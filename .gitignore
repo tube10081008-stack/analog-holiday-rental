@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.vercel/
+.netlify/
+
+# Environment (민감 정보)
+.env
+.env.local
+.env.prod
+.env.production
+.env.vercel.*
+.tmp_*
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Temp scripts (진단/분석용)
+check-study-status.js
+analyze-knowledge.js
+evaluate-knowledge-value.js
+archive-bad-memories.js
+check-brain.js
+test-*.js

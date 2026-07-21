@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>예약 관리 | 아날로그 홀리데이</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard/dist/web/static/pretendard.css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700;800&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="admin-body">
+  <main class="admin-page">
+    <section class="admin-page__hero">
+      <a class="admin-page__back" href="./index.html">← 메인으로 돌아가기</a>
+      <p class="admin-page__eyebrow">ANALOG HOLIDAY OS</p>
+      <h1>통합 워크스페이스</h1>
+      <p class="admin-page__description">에이전트들에게 업무를 할당하고 예약 데이터를 관리하세요.</p>
+      
+      <!-- 통합 허브 네비게이션 -->
+      <nav class="admin-hub-nav">
+        <div class="admin-hub-card" data-agent="geo">
+          <span class="admin-hub-card__icon">📦</span>
+          <div class="admin-hub-card__text">
+            <h3>지오 (물류/스케줄)</h3>
+            <p>배송 스케줄 및 타임라인 자동화</p>
+          </div>
+          <button class="admin-hub-card__brain-btn" data-agent="geo" title="지오 두뇌 관리">🧠</button>
+          <button class="admin-hub-card__chat-btn" data-agent="geo" title="지오와 대화하기">💬</button>
+        </div>
+        <div class="admin-hub-card" data-agent="noah">
+          <span class="admin-hub-card__icon">📈</span>
+          <div class="admin-hub-card__text">
+            <h3>노아 (마케팅/SNS)</h3>
+            <p>리뷰 기반 감성 분석 및 콘텐츠 생성</p>
+          </div>
+          <button class="admin-hub-card__brain-btn" data-agent="noah" title="노아 두뇌 관리">🧠</button>
+          <button class="admin-hub-card__chat-btn" data-agent="noah" title="노아와 대화하기">💬</button>
+        </div>
+        <div class="admin-hub-card" data-agent="hani">
+          <span class="admin-hub-card__icon">🎨</span>
+          <div class="admin-hub-card__text">
+            <h3>하니 (마케팅 사원)</h3>
+            <p>매거진 기획 및 트렌드 매칭</p>
+          </div>
+          <button class="admin-hub-card__brain-btn" data-agent="hani" title="하니 두뇌 관리">🧠</button>
+          <button class="admin-hub-card__chat-btn" data-agent="hani" title="하니와 대화하기">💬</button>
+        </div>
+        <div class="admin-hub-card admin-hub-card--alex" data-agent="alex">
+          <span class="admin-hub-card__icon">🎬</span>
+          <div class="admin-hub-card__text">
+            <h3>알렉스 (디자인/영상)</h3>
+            <p>포스트프로덕션 · 숏폼 제작 파이프라인</p>
+          </div>
+          <button class="admin-hub-card__brain-btn" data-agent="alex" title="알렉스 두뇌 관리">🧠</button>
+          <button class="admin-hub-card__chat-btn" data-agent="alex" title="알렉스와 대화하기">💬</button>
+        </div>
+        <div class="admin-hub-card" data-agent="lina">
+          <span class="admin-hub-card__icon">📋</span>
+          <div class="admin-hub-card__text">
+            <h3>리나 (CS/예약관리)</h3>
+            <p>예약 원장 확인 및 고객 응대</p>
+          </div>
+          <button class="admin-hub-card__brain-btn" data-agent="lina" title="리나 두뇌 관리">🧠</button>
+          <button class="admin-hub-card__chat-btn" data-agent="lina" title="리나와 대화하기">💬</button>
+        </div>
+      </nav>
+    </section>
+
+    <section class="admin-panel" id="reservationSection">
+      <form class="admin-auth" id="adminAuthForm">
+        <label class="admin-auth__field">
+          <span>관리자 키</span>
+          <input id="adminKeyInput" type="password" placeholder="실제 운영용 관리자 키를 입력하세요" autocomplete="current-password" required>
+        </label>
+        <p class="admin-auth__hint">`.env.example`의 `change-this-admin-key`는 예시값이라 실제 접속에는 사용할 수 없습니다.</p>
+        <div class="admin-auth__actions">
+          <button type="submit">예약 불러오기</button>
+          <button class="admin-auth__ghost" id="adminRefreshButton" type="button">새로고침</button>
+          <button class="admin-auth__ghost" id="adminMigrateButton" type="button">Postgres 이전</button>
+        </div>
+        <p class="admin-auth__status" id="adminStatus" role="status" aria-live="polite"></p>
+      </form>
+
+      <div class="admin-summary" id="adminSummary" hidden>
+        <div class="admin-summary__card">
+          <span>총 예약 수</span>
+          <strong id="reservationCount">0</strong>
+        </div>
+        <div class="admin-summary__card">
+          <span>저장 방식</span>
+          <strong id="storageMode">-</strong>
+        </div>
+        <div class="admin-summary__card">
+          <span>메일 연동</span>
+          <strong id="mailMode">-</strong>
+        </div>
+      </div>
+
+    <section class="admin-list" id="reservationList" aria-live="polite"></section>
+    
+    <!-- 채팅 모달 -->
+    <div id="chatModal" class="chat-modal" hidden>
+      <div class="chat-modal__content">
+        <header class="chat-modal__header">
+          <div class="chat-modal__agent-info">
+            <span id="chatModalIcon" class="chat-modal__icon">🤖</span>
+            <h2 id="chatModalTitle">에이전트 이름</h2>
+          </div>
+          <button id="closeChatModal" class="chat-modal__close">&times;</button>
+        </header>
+        <div id="chatMessages" class="chat-modal__messages">
+          <!-- 대화 내용이 여기 쌓입니다 -->
+        </div>
+        <form id="chatForm" class="chat-modal__footer">
+          <select id="chatSender" class="chat-modal__sender" title="발신자 선택">
+            <option value="신유진">신유진 대표</option>
+            <option value="홍성현">홍성현 대표</option>
+          </select>
+          <textarea id="chatInput" placeholder="메시지를 입력하세요..." required rows="1"></textarea>
+          <button type="submit">전송</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 🧠 두뇌 관리 모달 (Brain Dashboard) -->
+    <div id="brainModal" class="brain-modal" hidden>
+      <div class="brain-modal__content">
+        <header class="brain-modal__header">
+          <div class="brain-modal__title-area">
+            <span id="brainModalIcon">🧠</span>
+            <h2 id="brainModalTitle">에이전트 두뇌</h2>
+            <span id="brainMemoryCount" class="brain-modal__count">0개 기억</span>
+          </div>
+          <button id="closeBrainModal" class="brain-modal__close">&times;</button>
+        </header>
+
+        <!-- 기억 추가 폼 -->
+        <div class="brain-add-form">
+          <div class="brain-add-form__row">
+            <select id="brainNewType" class="brain-add-form__select">
+              <option value="directive">📌 지시사항</option>
+              <option value="fact">📋 업무 지식</option>
+              <option value="preference">💡 선호도</option>
+              <option value="lesson">⚠️ 교훈</option>
+              <option value="context">🌐 맥락</option>
+            </select>
+            <input id="brainNewTitle" type="text" placeholder="제목 (예: 부산 배송 D-3)" class="brain-add-form__title">
+          </div>
+          <div class="brain-add-form__row">
+            <input id="brainNewContent" type="text" placeholder="내용 (예: 부산 지역은 도서산간이므로 D-3에 발송)" class="brain-add-form__content">
+            <button id="brainAddBtn" type="button" class="brain-add-form__btn">➕ 기억 추가</button>
+          </div>
+        </div>
+
+        <!-- 기억 목록 -->
+        <div id="brainMemoryList" class="brain-memory-list">
+          <div class="brain-loading">기억을 불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+
+      <template id="reservationCardTemplate">
+        <article class="admin-reservation-card">
+          <div class="admin-reservation-card__header">
+            <div>
+              <p class="admin-reservation-card__service"></p>
+              <h2 class="admin-reservation-card__name"></h2>
+            </div>
+            <button class="admin-reservation-card__delete" type="button">삭제</button>
+          </div>
+          <dl class="admin-reservation-card__meta">
+            <div><dt>예약 ID</dt><dd data-field="id"></dd></div>
+            <div><dt>등록 시각</dt><dd data-field="createdAt"></dd></div>
+            <div><dt>이메일</dt><dd data-field="email"></dd></div>
+            <div><dt>연락처</dt><dd data-field="phone"></dd></div>
+            <div><dt>여행 일정</dt><dd data-field="schedule"></dd></div>
+            <div><dt>여행지</dt><dd data-field="destination"></dd></div>
+            <div class="admin-reservation-card__meta--full"><dt>원하는 카메라 / 무드</dt><dd data-field="mood"></dd></div>
+          </dl>
+        </article>
+      </template>
+    </section>
+  </main>
+
+  <script type="module" src="./admin.js"></script>
+</body>
+</html>

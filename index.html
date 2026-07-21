@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>아날로그 홀리데이 | 낭만적인 아날로그 여행 커뮤니티</title>
+  <meta
+    name="description"
+    content="아날로그 홀리데이는 여행 장비를 빌리는 곳을 넘어, 아날로그 감성과 커뮤니티를 함께 즐기는 여행 문화 서비스입니다."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard/dist/web/static/pretendard.css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="preload" as="image" href="./assets/hero-bundle-v3.webp">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="site-wrap">
+    <header class="site-header" id="siteHeader">
+      <div class="header-main">
+        <div class="header-main__inner">
+          <div class="header-main__left">
+            <a class="header-main__logo-text-only" href="#">
+              A N A L O G<br>H O L I D A Y
+            </a>
+          </div>
+          <div class="header-main__center">
+            <button class="header-main__search-bar" type="button">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <span>어디로 떠날까요?</span>
+            </button>
+          </div>
+
+          <div class="header-main__right">
+            <nav class="header-gnb">
+              <a href="#camera-collection">카메라</a>
+              <a href="#all-products">에디토리얼</a>
+              <a href="#service-assurance">안심 안내</a>
+              <a href="#reviews">후기</a>
+            </nav>
+            <div class="header-actions">
+              <a href="/admin.html" class="header-icon-btn" aria-label="로그인"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg></a>
+              <button class="header-icon-btn" aria-label="북마크"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="site-main">
+      <section class="hero-carousel" aria-label="프로모션 배너">
+        <div class="hero-carousel__viewport">
+          <article class="hero-slide hero-slide--image is-active">
+            <div class="hero-slide__overlay">
+              <p class="hero-slide__eyebrow">SUMMER BREEZE</p>
+              <h2 class="hero-slide__title">여름 바다의 윤슬,<br>그리고 한 점의 낭만</h2>
+              <p class="hero-slide__desc">디지털의 속도에서 벗어나, 찬란했던 80년대의 해변으로 초대합니다.</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="hero-carousel__controls">
+          <button class="hero-carousel__dot is-active" type="button" aria-label="1번 배너"></button>
+        </div>
+      </section>
+
+      <section class="shop-section curator-cameras-section" id="camera-collection">
+        <div class="shop-section__inner">
+          <div class="section-heading">
+            <div>
+              <p class="section-heading__eyebrow">CURATOR'S CAMERA EDIT</p>
+              <h2>아날로그 홀리데이 큐레이터의 카메라 6종</h2>
+            </div>
+            <p class="section-heading__text">
+              같은 필름을 넣어도 카메라마다 남기는 온도는 조금씩 다릅니다.
+              여행의 무드와 당신의 기분에 가장 잘 맞는 카메라를 큐레이터의 언어로 소개합니다.
+            </p>
+          </div>
+
+          <div class="curator-cameras__grid">
+            <article class="camera-card camera-card--magazine">
+              <div class="camera-card__media">
+                <img src="./assets/camera-kodak-m35-m38.webp" alt="코닥 M35와 M38 카메라" loading="lazy" decoding="async">
+              </div>
+              <div class="camera-card__body">
+                <span class="camera-card__index">01</span>
+                <h3>코닥 M35 / M38</h3>
+                <p class="camera-card__note">
+                  특유의 쨍하고 따뜻한 코닥의 옐로우 톤은 당신의 평범한 오늘을 한 편의 청춘 영화 속 명장면으로 만들어 줄 거예요.
+                </p>
+              </div>
+            </article>
+
+            <article class="camera-card camera-card--magazine camera-card--twilight">
+              <div class="camera-card__media">
+                <img src="./assets/camera-yashica-mf1.webp" alt="야시카 MF-1 카메라" loading="lazy" decoding="async">
+              </div>
+              <div class="camera-card__body">
+                <span class="camera-card__index">02</span>
+                <h3>야시카 MF-1</h3>
+                <p class="camera-card__note">
+                  군더더기 없는 미니멀한 바디와 매트한 질감은 혼자만의 조용한 여행이나 사색이 필요한 순간에 완벽한 파트너가 되어줍니다.
+                </p>
+              </div>
+            </article>
+
+            <article class="camera-card camera-card--magazine camera-card--monochrome">
+              <div class="camera-card__media">
+                <img src="./assets/camera-ilford-sprite.webp" alt="일포드 스프라이트 35-II 카메라" loading="lazy" decoding="async">
+              </div>
+              <div class="camera-card__body">
+                <span class="camera-card__index">03</span>
+                <h3>일포드 스프라이트 35-II</h3>
+                <p class="camera-card__note">
+                  빛바랜 흑백 영화의 우아한 낭만을 체험할 수 있는 타임머신처럼, 클래식한 분위기 속으로 당신을 안내합니다.
+                </p>
+              </div>
+            </article>
+
+            <article class="camera-card camera-card--magazine camera-card--pop">
+              <div class="camera-card__media">
+                <img src="./assets/camera-fotocola-35mm.webp" alt="포토콜라 35mm 카메라" loading="lazy" decoding="async">
+              </div>
+              <div class="camera-card__body">
+                <span class="camera-card__index">04</span>
+                <h3>포토콜라 35mm</h3>
+                <p class="camera-card__note">
+                  완벽한 구도보다 지금 이 순간의 즐거운 분위기 자체가 예술이 된다는 걸 보여주는, 가장 힙한 카메라예요.
+                </p>
+              </div>
+            </article>
+
+            <article class="camera-card camera-card--magazine camera-card--earth">
+              <div class="camera-card__media">
+                <img src="./assets/camera-agfa-analogue.webp" alt="아그파포토 아날로그 35mm 카메라" loading="lazy" decoding="async">
+              </div>
+              <div class="camera-card__body">
+                <span class="camera-card__index">05</span>
+                <h3>아그파포토 아날로그 35mm</h3>
+                <p class="camera-card__note">
+                  붉은 셔터를 누르는 순간 시계 초침이 조금 천천히 흐르는 듯한 착각에 빠지게 하는, 가장 포근한 주말 오후의 카메라입니다.
+                </p>
+              </div>
+            </article>
+
+            <article class="camera-card camera-card--magazine camera-card--night">
+              <div class="camera-card__media">
+                <img src="./assets/camera-okio-35mm.webp" alt="오키오 35mm 카메라" loading="lazy" decoding="async">
+              </div>
+              <div class="camera-card__body">
+                <span class="camera-card__index">06</span>
+                <h3>오키오 다회용 카메라</h3>
+                <p class="camera-card__note">
+                  강력한 플래시가 만드는 힙한 저화질 노이즈를 가장 아름답게 표현해 내는, 밤거리 감성의 완벽한 초대장입니다.
+                </p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="shop-section promo-copy-section" id="all-products">
+        <div class="shop-section__inner">
+          <div class="promo-copy">
+            <div class="promo-copy__hero">
+              <div class="promo-copy__text">
+                <p class="promo-copy__kicker">ANALOG HOLIDAY EDITORIAL</p>
+                <h2 class="promo-copy__lead">
+                  <span class="promo-copy__lead-highlight">13만 원</span>짜리 영상 외주를 맡겼더니,
+                  빈티지 카메라와 여행 세트가 따라왔다?
+                </h2>
+                <p class="promo-copy__sublead">
+                  아날로그 홀리데이는 장비만 전달하는 곳이 아니라, 여행의 분위기와 결과물까지 함께 설계하는 서비스 브랜드입니다.
+                  카메라를 고르는 일도, 여행용품을 빠뜨리지 않는 일도, 편집 완성도를 걱정하는 일도 모두 브랜드 경험 안으로 묶었습니다.
+                </p>
+              </div>
+
+              <aside class="promo-copy__aside" aria-label="브랜드 무드 이미지">
+                <figure class="promo-copy__photo promo-copy__photo--main">
+                  <img src="./assets/travel-kit-image.webp" alt="아날로그 홀리데이 여행 무드 이미지" loading="lazy" decoding="async">
+                </figure>
+                <figure class="promo-copy__photo promo-copy__photo--stack-a">
+                  <img src="./assets/story-2.webp" alt="커플 여행 스냅" loading="lazy" decoding="async">
+                </figure>
+                <figure class="promo-copy__photo promo-copy__photo--stack-b">
+                  <img src="./assets/story-3.webp" alt="여행 감성 콜라주" loading="lazy" decoding="async">
+                </figure>
+              </aside>
+            </div>
+
+            <div class="promo-copy__quotes">
+              <article class="promo-copy__quote-card">
+                <p>"4800만 화소의 선명한 렌즈보다, 초점이 조금 흔들린 뷰파인더가 당신의 추억을 더 따뜻하게 담아낼 거예요."</p>
+              </article>
+              <article class="promo-copy__quote-card">
+                <p>"여행 전날 꼭 깜빡하는 돼지코, 보조배터리, 목베개. 이제 신경 쓰지 마세요. 공항에서 완벽하게 세팅된 파우치만 챙겨 떠나면 됩니다."</p>
+              </article>
+              <article class="promo-copy__quote-card">
+                <p>"알림은 끄고, 온전히 나에게 집중하는 시간. 카메라 셔터 소리만 남는 완벽한 아날로그 홀리데이를 경험해 보세요."</p>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="shop-section service-assurance-section" id="service-assurance">
+        <div class="shop-section__inner">
+          <div class="section-heading section-heading--stacked">
+            <div>
+              <p class="section-heading__eyebrow">SERVICE PROMISE</p>
+              <h2>준비의 번거로움은 줄이고, 여행의 낭만은 더 길게 남기는 서비스 안내</h2>
+            </div>
+          </div>
+
+          <article class="service-assurance__visual service-assurance__visual--wide">
+            <img src="./assets/service-promise-wide-v2.webp" alt="아날로그 홀리데이 서비스 프라미스 구성 이미지" loading="lazy" decoding="async">
+          </article>
+
+          <div class="service-assurance__details">
+            <article class="service-assurance__intro">
+              <p class="section-heading__eyebrow">SERVICE PROMISE</p>
+              <h2>무거운 짐 싸기부터 귀찮은 영상 편집까지, 저희가 다 해드립니다. 당신은 온전히 낭만을 즐기세요.</h2>
+              <p>
+                아날로그 홀리데이는 고객이 고민해야 했던 준비, 수령, 반납, 편집의 시간을 서비스로 흡수합니다.
+                여행 전에는 시간 절약을, 여행 후에는 결과물의 확실성을 제공합니다.
+              </p>
+            </article>
+
+            <article class="service-assurance__safety">
+              <span class="service-assurance__badge">트러블 안심선언</span>
+              <h3>파손이 걱정돼서 망설이지 않도록</h3>
+              <p>예상치 못한 트러블이 생기더라도 최대 고객 부담금 상한 기준을 통해 마음 편하게 여행을 할 수 있습니다.</p>
+              <ul class="service-assurance__list">
+                <li>사전 안내된 기준으로 부담 범위를 명확하게 고지</li>
+                <li>이용 전 상담을 통해 가장 적합한 패키지와 사용법까지 케어</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="shop-section reviews-section" id="reviews">
+        <div class="shop-section__inner">
+          <div class="section-heading">
+            <div>
+              <p class="section-heading__eyebrow">MONTHLY COMMUNITY PICK</p>
+              <h2>이달의 아날로그 여행가</h2>
+            </div>
+            <a class="section-heading__link" href="#">참여 방법 보기</a>
+          </div>
+
+          <div class="review-grid">
+            <article class="review-card">
+              <div class="review-card__photo review-card__photo--story-1"></div>
+              <div class="review-card__body">
+                <span class="review-card__rating">숏폼 공유 후기</span>
+                <strong class="review-card__author">김OO</strong>
+                <p class="review-card__summary">준비가 간편해서 여행 시작부터 여유가 있었고, 편집 결과물 덕분에 여행이 하나의 작품처럼 남았어요.</p>
+              </div>
+            </article>
+
+            <article class="review-card">
+              <div class="review-card__photo review-card__photo--story-2"></div>
+              <div class="review-card__body">
+                <span class="review-card__rating">필름 무드 후기</span>
+                <strong class="review-card__author">TOOO OOOOO</strong>
+                <p class="review-card__summary">선명하지 않아도 더 감정적으로 남는 장면들이 많아서, 오히려 스마트폰보다 더 오래 기억에 남아요.</p>
+              </div>
+            </article>
+
+            <article class="review-card">
+              <div class="review-card__photo review-card__photo--story-4"></div>
+              <div class="review-card__body">
+                <span class="review-card__rating">디톡스 여행 후기</span>
+                <strong class="review-card__author">최OO</strong>
+                <p class="review-card__summary">휴대폰을 덜 보게 되니까 여행의 속도가 정말 달라졌고, 기록 자체가 여행의 일부가 되는 느낌이었어요.</p>
+              </div>
+            </article>
+
+            <article class="review-card">
+              <div class="review-card__photo review-card__photo--story-6"></div>
+              <div class="review-card__body">
+                <span class="review-card__rating">히어로 번들 후기</span>
+                <strong class="review-card__author">정OO</strong>
+                <p class="review-card__summary">전문가가 제작해준 숏폼 영상 덕분에 인생영상 제대로 남겼네요. 제 여행에 마음을 다해주셔서 정말 감사드립니다!</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer__inner">
+        <div class="site-footer__left">
+          <p class="site-footer__cs">고객센터 평일 10:00 - 19:00 / 주말 및 공휴일 제외</p>
+          <div class="site-footer__buttons">
+            <button type="button">입점 문의</button>
+            <button type="button">제휴 문의</button>
+            <button type="button">B2B 구매</button>
+            <button type="button">1:1 문의</button>
+          </div>
+          <nav class="site-footer__links" aria-label="푸터 메뉴">
+            <a href="#">ABOUT</a><a href="#">NEWSLETTER</a><a href="#">이용약관</a><a href="#"><strong>개인정보 처리방침</strong></a>
+          </nav>
+          <div class="site-footer__company-info">
+            상호명 : 아날로그 홀리데이 | 대표자 : 신유진 | 주소 : 경기도 파주시 와석순환로 15, 19층 2호 | 사업자등록번호 : 000-00-00000 | 통신판매업신고 : 2026-ㅇㅇㅇ-0000호<br>
+            이메일 : tube10081008@gmail.com | 카카오톡 채널 상담 및 1:1 문의를 통한 안내<br><br>
+            아날로그 홀리데이는 통신판매 중개자로서 통신판매의 당사자가 아니며 상품의 예약, 이용 등과 관련한 의무와 책임은 각 판매자에게 있습니다.
+            <p class="site-footer__copyright">Copyright©ANALOG HOLIDAY</p>
+          </div>
+        </div>
+        <div class="site-footer__right">
+          <div class="site-footer__brand">
+            A N A L O G<br>H O L I D A Y
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <div class="floating-quick-reserve" aria-label="고정 퀵 예약">
+    <div class="floating-quick-reserve__text">
+      <span class="floating-quick-reserve__eyebrow">QUICK RENTAL</span>
+      <strong>빠르게 예약하고 싶다면</strong>
+    </div>
+    <button class="floating-quick-reserve__button js-open-reserve" type="button" data-service="빠른 퀵 렌탈 문의">퀵 렌탈 예약</button>
+  </div>
+
+  <div class="reserve-modal" id="reserveModal" hidden>
+    <div class="reserve-modal__backdrop"></div>
+    <div class="reserve-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="reserveModalTitle">
+      <button class="reserve-modal__close" type="button" aria-label="예약 폼 닫기">×</button>
+      <div class="reserve-modal__header">
+        <p class="reserve-modal__eyebrow">QUICK RENTAL FORM</p>
+        <h2 id="reserveModalTitle">퀵 렌탈 예약</h2>
+        <p>아래 내용을 남겨주시면 아날로그 홀리데이가 여행 무드에 맞는 카메라와 패키지를 제안해 드립니다.</p>
+      </div>
+
+      <form class="reserve-form" id="reserveForm">
+        <input type="hidden" id="reserveService" name="reserveService">
+
+        <label class="reserve-form__field">
+          <span>성함</span>
+          <input id="reserveName" name="name" type="text" placeholder="예: 김아날로그" required>
+        </label>
+
+        <label class="reserve-form__field">
+          <span>이메일</span>
+          <input id="reserveEmail" name="email" type="email" placeholder="example@email.com" required>
+        </label>
+
+        <label class="reserve-form__field">
+          <span>연락처</span>
+          <input id="reservePhone" name="phone" type="tel" placeholder="010-1234-5678" required>
+        </label>
+
+        <div class="reserve-form__field-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <label class="reserve-form__field">
+            <span>출국일</span>
+            <input id="reserveDeparture" name="departure" type="date" required>
+          </label>
+          <label class="reserve-form__field">
+            <span>귀국일</span>
+            <input id="reserveReturn" name="returnDate" type="date" required>
+          </label>
+        </div>
+
+        <label class="reserve-form__field">
+          <span>여행지</span>
+          <input id="reserveDestination" name="destination" type="text" placeholder="예: 오사카, 파리, 제주" required>
+        </label>
+
+        <label class="reserve-form__field">
+          <span>카메라 선택 (기본 패키지 89,000원)</span>
+          <select id="reserveCamera" name="cameraId" required>
+            <option value="" disabled selected>출국일/귀국일을 먼저 선택해 주세요</option>
+          </select>
+          <p class="reserve-form__hint" id="reserveCameraHint" style="margin:4px 0 0;font-size:12px;color:var(--muted-soft)">*기본 패키지에는 [선택한 카메라 1대 + 여행 소품 박스 1세트]가 포함됩니다.</p>
+        </label>
+
+        <label class="reserve-form__field">
+          <span>여행 소품 박스 추가 (옵션)</span>
+          <select id="reserveExtraBox" name="extraBox">
+            <option value="0" selected>추가 안 함 (+0원)</option>
+            <option value="1">1박스 추가 (+19,000원)</option>
+            <option value="2">2박스 추가 (+38,000원)</option>
+            <option value="3">3박스 추가 (+57,000원)</option>
+          </select>
+          <p class="reserve-form__hint" style="margin:4px 0 0;font-size:12px;color:var(--muted-soft)">여행 인원이 많거나 소품이 더 필요하시면 추가로 대여할 수 있습니다.</p>
+        </label>
+
+        <label class="reserve-form__field reserve-form__field--full">
+          <span>여행의 무드 또는 추가 요청사항</span>
+          <textarea id="reserveMood" name="mood" rows="4" placeholder="예: 쨍한 여름 바다, 차분한 골목길, 화려한 네온사인 야경 등 원하시는 느낌을 자유롭게 적어주세요"></textarea>
+        </label>
+
+        <div class="reserve-form__actions">
+          <button class="reserve-form__submit" type="submit">예약 문의 보내기</button>
+          <p class="reserve-form__hint">입력한 내용은 예약 데이터베이스에 저장되고, 메일 알림이 연결되어 있다면 동시에 발송됩니다.</p>
+          <p class="reserve-form__status" id="reserveStatus" role="status" aria-live="polite"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="./script.js"></script>
+  <script src="./chat-widget.js"></script>
+</body>
+</html>

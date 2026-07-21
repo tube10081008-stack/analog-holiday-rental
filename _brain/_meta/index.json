@@ -1,0 +1,477 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-17T02:01:15.621Z",
+  "node_count": 47,
+  "entries": [
+    {
+      "node_id": "mem_hani_1778927952938_jggn",
+      "title": "UGC 큐레이션 프레임워크",
+      "agent_id": "hani",
+      "memory_type": "fact",
+      "path": "_brain/hani/facts/ugc-큐레이션-프레임워크.md",
+      "status": "active",
+      "importance": 9,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_hani_1778927952643_urnt",
+      "title": "감성 키워드 밀도 최적화",
+      "agent_id": "hani",
+      "memory_type": "fact",
+      "path": "_brain/hani/facts/감성-키워드-밀도-최적화.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_hani_1778927952340_npk8",
+      "title": "스토리텔링 3막 구조 법칙",
+      "agent_id": "hani",
+      "memory_type": "fact",
+      "path": "_brain/hani/facts/스토리텔링-3막-구조-법칙.md",
+      "status": "active",
+      "importance": 9,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_hani_1778927953267_kxyf",
+      "title": "시즌별 콘텐츠 캘린더 설계",
+      "agent_id": "hani",
+      "memory_type": "fact",
+      "path": "_brain/hani/facts/시즌별-콘텐츠-캘린더-설계.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_hani_1778927953566_ms1v",
+      "title": "프라이버시 경계선 원칙",
+      "agent_id": "hani",
+      "memory_type": "lesson",
+      "path": "_brain/hani/lessons/프라이버시-경계선-원칙.md",
+      "status": "active",
+      "importance": 10,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_geo_1778927953862_yasg",
+      "title": "라스트마일 배송 최적화 공식",
+      "agent_id": "geo",
+      "memory_type": "fact",
+      "path": "_brain/geo/facts/라스트마일-배송-최적화-공식.md",
+      "status": "active",
+      "importance": 9,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_geo_1778927954773_qpt0",
+      "title": "물류 리스크 매트릭스",
+      "agent_id": "geo",
+      "memory_type": "fact",
+      "path": "_brain/geo/facts/물류-리스크-매트릭스.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_geo_1778927954478_6ory",
+      "title": "반품 프로세스 SLA 기준",
+      "agent_id": "geo",
+      "memory_type": "fact",
+      "path": "_brain/geo/facts/반품-프로세스-sla-기준.md",
+      "status": "active",
+      "importance": 9,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_geo_1778927954162_i8xq",
+      "title": "재고 회전율 기반 발주 모델",
+      "agent_id": "geo",
+      "memory_type": "fact",
+      "path": "_brain/geo/facts/재고-회전율-기반-발주-모델.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_geo_1778927955112_kmxf",
+      "title": "패키징 파손율 저감 연구",
+      "agent_id": "geo",
+      "memory_type": "fact",
+      "path": "_brain/geo/facts/패키징-파손율-저감-연구.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778927956334_49tm",
+      "title": "A/B 테스트 통계적 유의성 기준",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/a-b-테스트-통계적-유의성-기준.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778928989892_b435",
+      "title": "AARRR 퍼널 분석",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/aarrr-퍼널-분석.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778929809874_wja0",
+      "title": "LTV 향상 전략",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/ltv-향상-전략.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778929066219_rtru",
+      "title": "NPS 한계",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/nps-한계.md",
+      "status": "active",
+      "importance": 5,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778927955423_gjla",
+      "title": "SNS 알고리즘 최적 게시 전략",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/sns-알고리즘-최적-게시-전략.md",
+      "status": "active",
+      "importance": 9,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778927956027_oy6r",
+      "title": "감성 분석 NPS 연계 모델",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/감성-분석-nps-연계-모델.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778930866974_ap02",
+      "title": "감성 분석 모델 상관계수",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/감성-분석-모델-상관계수.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778929066627_97q0",
+      "title": "감성 분석 모델 작동 원리",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/감성-분석-모델-작동-원리.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778929065812_wbg5",
+      "title": "고객 여정별 감정 변화 데이터",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/고객-여정별-감정-변화-데이터.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778929067443_yx3d",
+      "title": "슈퍼 팬 식별 및 리퍼럴 극대화",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/슈퍼-팬-식별-및-리퍼럴-극대화.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778930867390_tugu",
+      "title": "슈퍼팬 재구매율",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/슈퍼팬-재구매율.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778929809070_a0jm",
+      "title": "인스타그램 릴스 전략",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/인스타그램-릴스-전략.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778929065201_cvv3",
+      "title": "인스타그램 콘텐츠 전략",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/인스타그램-콘텐츠-전략.md",
+      "status": "active",
+      "importance": 6,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778927955730_nt63",
+      "title": "전환 퍼널 AARRR 적용법",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/전환-퍼널-aarrr-적용법.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778929067035_ijak",
+      "title": "초기 이탈 징후 포착",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/초기-이탈-징후-포착.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_noah_1778927956629_8u8j",
+      "title": "콘텐츠 ROI 측정 프레임워크",
+      "agent_id": "noah",
+      "memory_type": "fact",
+      "path": "_brain/noah/facts/콘텐츠-roi-측정-프레임워크.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_lina_1778927958186_4nzp",
+      "title": "고객 세그먼트별 맞춤 커뮤니케이션",
+      "agent_id": "lina",
+      "memory_type": "fact",
+      "path": "_brain/lina/facts/고객-세그먼트별-맞춤-커뮤니케이션.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_lina_1778927957239_93jj",
+      "title": "고객 응대 HEART 프레임워크",
+      "agent_id": "lina",
+      "memory_type": "fact",
+      "path": "_brain/lina/facts/고객-응대-heart-프레임워크.md",
+      "status": "active",
+      "importance": 10,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_lina_1778927956925_2gp9",
+      "title": "서비스 리커버리 패러독스",
+      "agent_id": "lina",
+      "memory_type": "fact",
+      "path": "_brain/lina/facts/서비스-리커버리-패러독스.md",
+      "status": "active",
+      "importance": 9,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_lina_1778927957541_9mw8",
+      "title": "예약 노쇼 방지 넛지 설계",
+      "agent_id": "lina",
+      "memory_type": "fact",
+      "path": "_brain/lina/facts/예약-노쇼-방지-넛지-설계.md",
+      "status": "active",
+      "importance": 9,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_lina_1778927957879_kb2f",
+      "title": "옴니채널 CS 응답 속도 기준",
+      "agent_id": "lina",
+      "memory_type": "fact",
+      "path": "_brain/lina/facts/옴니채널-cs-응답-속도-기준.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_alex_1778930910995_ppaf",
+      "title": "노아님의 역할",
+      "agent_id": "alex",
+      "memory_type": "fact",
+      "path": "_brain/alex/facts/노아님의-역할.md",
+      "status": "active",
+      "importance": 5,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_alex_1778927958494_r7e5",
+      "title": "숏폼 영상 후킹 3초 법칙",
+      "agent_id": "alex",
+      "memory_type": "fact",
+      "path": "_brain/alex/facts/숏폼-영상-후킹-3초-법칙.md",
+      "status": "active",
+      "importance": 9,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_alex_1778930910574_ebyp",
+      "title": "신규 필름 스캔본 작업",
+      "agent_id": "alex",
+      "memory_type": "context",
+      "path": "_brain/alex/facts/신규-필름-스캔본-작업.md",
+      "status": "active",
+      "importance": 6,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_alex_1778927959105_8tq3",
+      "title": "썸네일 CTR 최적화 공식",
+      "agent_id": "alex",
+      "memory_type": "fact",
+      "path": "_brain/alex/facts/썸네일-ctr-최적화-공식.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_alex_1778927959405_hrez",
+      "title": "영상 편집 페이싱 이론",
+      "agent_id": "alex",
+      "memory_type": "fact",
+      "path": "_brain/alex/facts/영상-편집-페이싱-이론.md",
+      "status": "active",
+      "importance": 7,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_alex_1778927959726_2vl0",
+      "title": "장비 촬영 비주얼 가이드라인",
+      "agent_id": "alex",
+      "memory_type": "fact",
+      "path": "_brain/alex/facts/장비-촬영-비주얼-가이드라인.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "mem_alex_1778927958794_8uh0",
+      "title": "컬러 그레이딩 감성 매핑 체계",
+      "agent_id": "alex",
+      "memory_type": "fact",
+      "path": "_brain/alex/facts/컬러-그레이딩-감성-매핑-체계.md",
+      "status": "active",
+      "importance": 8,
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "share_geo_hani_1778982497434",
+      "title": "💌 지오→하니: MZ 아날로그 여행 트렌드 및 물류 가이드",
+      "agent_id": "geo",
+      "memory_type": "shared",
+      "path": "_brain/_shared/geo-to-하니-지오_지오-하니-mz-아날로그-여행-트렌드-및-물류-가이드.md",
+      "status": "active",
+      "category": "insight",
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "share_geo_hani_1778982456612",
+      "title": "💌 지오→하니: 부산 D-3 출고 및 필름카메라 물류 전략",
+      "agent_id": "geo",
+      "memory_type": "shared",
+      "path": "_brain/_shared/geo-to-하니-지오_지오-하니-부산-d-3-출고-및-필름카메라-물류-전략.md",
+      "status": "active",
+      "category": "strategy",
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "share_geo_hani_1778982409165",
+      "title": "💌 지오→하니: 부산 배송 D-3 조정 및 카메라 물류 대응",
+      "agent_id": "geo",
+      "memory_type": "shared",
+      "path": "_brain/_shared/geo-to-하니-지오_지오-하니-부산-배송-d-3-조정-및-카메라-물류-대응.md",
+      "status": "active",
+      "category": "strategy",
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "share_hani_geo_1778980734451",
+      "title": "💌 하니→지오: 여름 캠페인 결과 및 수요 데이터",
+      "agent_id": "hani",
+      "memory_type": "shared",
+      "path": "_brain/_shared/hani-to-지오-하니_하니-지오-여름-캠페인-결과-및-수요-데이터.md",
+      "status": "active",
+      "category": "data",
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "test_direct_1778980668857",
+      "title": "💌 하니→지오: 여름 캠페인 물류 연동",
+      "agent_id": "hani",
+      "memory_type": "shared",
+      "path": "_brain/_shared/hani-to-지오-하니_하니-지오-여름-캠페인-물류-연동.md",
+      "status": "active",
+      "category": "logistics",
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "share_noah_alex_1778980588185",
+      "title": "💌 노아→알렉스: 감성 분석 결과 및 브리핑 공유",
+      "agent_id": "noah",
+      "memory_type": "shared",
+      "path": "_brain/_shared/noah-to-알렉스-노아_노아-알렉스-감성-분석-결과-및-브리핑-공유.md",
+      "status": "active",
+      "category": "data",
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "share_noah_alex_1778981475599",
+      "title": "💌 노아→알렉스: 감성 분석 데이터 공유",
+      "agent_id": "noah",
+      "memory_type": "shared",
+      "path": "_brain/_shared/noah-to-알렉스-노아_노아-알렉스-감성-분석-데이터-공유.md",
+      "status": "active",
+      "category": "data",
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "share_noah_alex_1778980662814",
+      "title": "💌 노아→알렉스: 감성 분석 데이터 및 브리핑 공유",
+      "agent_id": "noah",
+      "memory_type": "shared",
+      "path": "_brain/_shared/noah-to-알렉스-노아_노아-알렉스-감성-분석-데이터-및-브리핑-공유.md",
+      "status": "active",
+      "category": "insight",
+      "updated_at": "2026-05-17"
+    },
+    {
+      "node_id": "share_noah_alex_1778933350823",
+      "title": "💌 노아→알렉스: 감성 분석 모델 공유 및 브리핑",
+      "agent_id": "noah",
+      "memory_type": "shared",
+      "path": "_brain/_shared/noah-to-알렉스-노아_노아-알렉스-감성-분석-모델-공유-및-브리핑.md",
+      "status": "active",
+      "category": "insight",
+      "updated_at": "2026-05-17"
+    }
+  ]
+}

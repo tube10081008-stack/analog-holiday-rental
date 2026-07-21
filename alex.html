@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>알렉스 포스트프로덕션 | 아날로그 홀리데이</title>
+  <meta name="description" content="디자인팀 알렉스 — 필름 반납부터 숏폼 납품까지, 콘텐츠 파이프라인을 총괄합니다">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard/dist/web/static/pretendard.css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700;800&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="alex-body">
+
+  <header class="alex-header">
+    <div class="alex-header__inner">
+      <a class="alex-header__back" href="./admin.html">← 워크스페이스</a>
+      <div class="alex-header__brand">
+        <img class="alex-header__avatar" src="./assets/alex-avatar.png" alt="알렉스" width="48" height="48">
+        <div>
+          <h1 class="alex-header__title">알렉스 <span class="alex-header__badge">디자인팀 · 영상제작</span></h1>
+          <p class="alex-header__subtitle">포스트프로덕션 매니저 — 필름 반납부터 숏폼 납품까지</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="alex-main">
+    <!-- 인증 -->
+    <section class="alex-auth" id="alexAuth">
+      <div class="alex-auth__card">
+        <p>🔐 관리자 키를 입력하세요</p>
+        <form class="alex-auth__form" id="alexAuthForm">
+          <input id="alexKeyInput" type="password" placeholder="RESERVATION_ADMIN_KEY" autocomplete="current-password" required>
+          <button type="submit" class="alex-btn alex-btn--primary">접속</button>
+        </form>
+        <p class="alex-auth__error" id="alexAuthError" hidden></p>
+      </div>
+    </section>
+
+    <!-- 대시보드 (인증 후 표시) -->
+    <div id="alexDashboard" hidden>
+
+      <!-- 파이프라인 요약 카드 -->
+      <section class="alex-summary" id="alexSummary"></section>
+
+      <!-- 탭 -->
+      <nav class="alex-tabs">
+        <button class="alex-tab alex-tab--active" data-tab="pipeline" type="button">🎬 파이프라인</button>
+        <button class="alex-tab" data-tab="shortform" type="button">✂️ 숏폼 기획</button>
+        <button class="alex-tab" data-tab="community" type="button">🌐 커뮤니티</button>
+      </nav>
+
+      <!-- 파이프라인 보드 -->
+      <section class="alex-panel" id="alexPipeline">
+        <div class="alex-panel__header">
+          <span>콘텐츠 제작 파이프라인</span>
+          <button class="alex-btn alex-btn--secondary" id="alexRefresh" type="button">🔄 새로고침</button>
+        </div>
+        <div class="alex-pipeline" id="alexPipelineBoard">
+          <p class="alex-empty">데이터를 불러오는 중...</p>
+        </div>
+      </section>
+
+      <!-- 숏폼 기획 AI -->
+      <section class="alex-panel" id="alexShortform" hidden>
+        <div class="alex-panel__header">
+          <span>✂️ 알렉스 AI — 숏폼 기획</span>
+        </div>
+        <div class="alex-ai">
+          <div class="alex-ai__modes">
+            <button class="alex-ai__mode alex-ai__mode--active" data-mode="shortform" type="button">🎬 숏폼 기획안</button>
+            <button class="alex-ai__mode" data-mode="delivery" type="button">📬 납품 메시지</button>
+          </div>
+          <textarea class="alex-ai__input" id="alexAIInput" rows="5" placeholder="숏폼 기획 요청을 입력하세요...&#10;&#10;예시: '제주도 여행, 코닥 M35, 청춘영화 감성 → 15초 릴스 기획안'"></textarea>
+          <div class="alex-ai__actions">
+            <label class="alex-ai__check">
+              <input type="checkbox" id="alexIncludeData" checked> 편집 대기 고객 데이터 포함
+            </label>
+            <button class="alex-btn alex-btn--primary" id="alexAIGenBtn" type="button">✨ 생성</button>
+          </div>
+          <div class="alex-ai__loader" id="alexAILoader" hidden>
+            <div class="alex-loader-dots"><span></span><span></span><span></span></div>
+            <p>알렉스가 기획 중이에요...</p>
+          </div>
+          <div class="alex-ai__result" id="alexAIResult"></div>
+        </div>
+      </section>
+
+      <!-- 커뮤니티 AI -->
+      <section class="alex-panel" id="alexCommunity" hidden>
+        <div class="alex-panel__header">
+          <span>🌐 커뮤니티 기획</span>
+        </div>
+        <div class="alex-ai">
+          <textarea class="alex-ai__input" id="alexCommunityInput" rows="5" placeholder="커뮤니티 기획 요청을 입력하세요...&#10;&#10;예시: '이번 달 포토 챌린지 이벤트 기획안 만들어줘'"></textarea>
+          <div class="alex-ai__actions">
+            <button class="alex-btn alex-btn--primary" id="alexCommunityGenBtn" type="button">✨ 생성</button>
+          </div>
+          <div class="alex-ai__loader" id="alexCommunityLoader" hidden>
+            <div class="alex-loader-dots"><span></span><span></span><span></span></div>
+            <p>알렉스가 기획 중이에요...</p>
+          </div>
+          <div class="alex-ai__result" id="alexCommunityResult"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="./alex.js"></script>
+</body>
+</html>

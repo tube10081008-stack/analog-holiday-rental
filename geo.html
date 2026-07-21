@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>지오 물류 대시보드 | 아날로그 홀리데이</title>
+  <meta name="description" content="물류팀 총괄 지오 — 배송 스케줄링, 알림톡 생성, 물류 분석">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard/dist/web/static/pretendard.css">
+  <link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="geo-body">
+
+  <header class="geo-header">
+    <div class="geo-header__inner">
+      <a class="geo-header__back" href="./index.html">← 메인으로</a>
+      <div class="geo-header__brand">
+        <img class="geo-header__avatar" src="./assets/geo-avatar.png" alt="지오" width="48" height="48">
+        <div>
+          <h1 class="geo-header__title">지오 <span class="geo-header__badge">물류팀 · 총괄</span></h1>
+          <p class="geo-header__subtitle">배송 스케줄링 & 백오피스 자동화</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="geo-main">
+    <!-- 인증 -->
+    <section class="geo-auth" id="geoAuth">
+      <div class="geo-auth__card">
+        <p>🔐 관리자 키를 입력하세요</p>
+        <form class="geo-auth__form" id="geoAuthForm">
+          <input id="geoKeyInput" type="password" placeholder="RESERVATION_ADMIN_KEY" autocomplete="current-password" required>
+          <button type="submit" class="geo-btn geo-btn--primary">접속</button>
+        </form>
+        <p class="geo-auth__error" id="geoAuthError" hidden></p>
+      </div>
+    </section>
+
+    <!-- 대시보드 (인증 후 표시) -->
+    <div id="geoDashboard" hidden>
+      <!-- 요약 카드 -->
+      <section class="geo-summary" id="geoSummary">
+        <div class="geo-summary__card geo-summary__card--total">
+          <span class="geo-summary__icon">📦</span>
+          <div><strong id="geoTotal">0</strong><span>전체 예약</span></div>
+        </div>
+        <div class="geo-summary__card geo-summary__card--upcoming">
+          <span class="geo-summary__icon">🗓️</span>
+          <div><strong id="geoUpcoming">0</strong><span>배송 대기</span></div>
+        </div>
+        <div class="geo-summary__card geo-summary__card--ship">
+          <span class="geo-summary__icon">🚚</span>
+          <div><strong id="geoShipReady">0</strong><span>발송 준비</span></div>
+        </div>
+        <div class="geo-summary__card geo-summary__card--shipped" style="background:#eaf2ff">
+          <span class="geo-summary__icon" style="color:#3B82F6">📦</span>
+          <div><strong id="geoShippedOut" style="color:#3B82F6">0</strong><span style="color:#3B82F6">발송 완료</span></div>
+        </div>
+        <div class="geo-summary__card geo-summary__card--trip">
+          <span class="geo-summary__icon">✈️</span>
+          <div><strong id="geoInTrip">0</strong><span>여행 중</span></div>
+        </div>
+        <div class="geo-summary__card geo-summary__card--return">
+          <span class="geo-summary__icon">📮</span>
+          <div><strong id="geoReturnDue">0</strong><span>반납 대기</span></div>
+        </div>
+        <div class="geo-summary__card geo-summary__card--overdue">
+          <span class="geo-summary__icon">⚠️</span>
+          <div><strong id="geoOverdue">0</strong><span>연체</span></div>
+        </div>
+      </section>
+
+      <!-- 재고 현황 -->
+      <section class="geo-inventory" id="geoInventory">
+        <p class="geo-timeline__empty">재고 데이터를 불러오는 중...</p>
+      </section>
+
+      <!-- 탭 -->
+      <nav class="geo-tabs">
+        <button class="geo-tab geo-tab--active" data-tab="timeline" type="button">📋 예약 타임라인</button>
+        <button class="geo-tab" data-tab="ai" type="button">🤖 AI 어시스턴트</button>
+      </nav>
+
+      <!-- 예약 타임라인 -->
+      <section class="geo-panel" id="geoTimeline">
+        <div class="geo-panel__header">
+          <span>물류 스케줄 타임라인</span>
+          <button class="geo-btn geo-btn--secondary" id="geoRefresh" type="button">🔄 새로고침</button>
+        </div>
+        <div class="geo-timeline" id="geoTimelineList">
+          <p class="geo-timeline__empty">데이터를 불러오는 중...</p>
+        </div>
+      </section>
+
+      <!-- AI 어시스턴트 -->
+      <section class="geo-panel" id="geoAI" hidden>
+        <div class="geo-panel__header">
+          <span>🤖 지오 AI 어시스턴트</span>
+        </div>
+        <div class="geo-ai">
+          <div class="geo-ai__modes">
+            <button class="geo-ai__mode geo-ai__mode--active" data-mode="notification" type="button">📱 알림톡 생성</button>
+            <button class="geo-ai__mode" data-mode="schedule" type="button">📅 스케줄 최적화</button>
+            <button class="geo-ai__mode" data-mode="analysis" type="button">📊 물류 분석</button>
+          </div>
+          <textarea class="geo-ai__input" id="geoAIInput" rows="5" placeholder="요청 내용을 입력하세요...&#10;&#10;예시: '이번 주 출국 예정 고객들에게 배송 출발 알림톡을 작성해줘'"></textarea>
+          <div class="geo-ai__actions">
+            <label class="geo-ai__check">
+              <input type="checkbox" id="geoIncludeData" checked> 예약 데이터 포함
+            </label>
+            <button class="geo-btn geo-btn--primary" id="geoAIGenBtn" type="button">✨ 생성</button>
+          </div>
+          <div class="geo-ai__loader" id="geoAILoader" hidden>
+            <div class="geo-loader-dots"><span></span><span></span><span></span></div>
+            <p>지오가 확인 중이에요...</p>
+          </div>
+          <div class="geo-ai__result" id="geoAIResult"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="./geo.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-17T00:00:00.000Z",
+  "description": "아날로그 홀리데이 에이전트 지식 관리 정책",
+  "classification_weights": {
+    "directive": 3,
+    "fact": 1,
+    "lesson": 2,
+    "preference": 1,
+    "context": 1
+  },
+  "auto_apply_thresholds": {
+    "memory_creation": 0.7,
+    "importance_upgrade": 0.85,
+    "archiving": 0.5,
+    "cross_agent_share": 0.8
+  },
+  "archiving_rules": {
+    "max_memories_per_agent": 100,
+    "archive_after_days_inactive": 90,
+    "min_importance_to_keep": 3
+  },
+  "agents": ["hani", "geo", "noah", "lina", "alex"]
+}

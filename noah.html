@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>노아 마케팅 대시보드 | 아날로그 홀리데이</title>
+  <meta name="description" content="아날로그 홀리데이 마케팅팀 AI 어시스턴트 노아 — 콘텐츠 생성, 감성 분석, SEO 최적화, 이메일 캠페인">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard/dist/web/static/pretendard.css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700;800&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="noah-body">
+
+  <!-- ── 헤더 ── -->
+  <header class="noah-header">
+    <div class="noah-header__inner">
+      <a class="noah-header__back" href="./index.html">← 메인으로</a>
+      <div class="noah-header__brand">
+        <img class="noah-header__avatar" src="./assets/noah-avatar.png" alt="노아" width="48" height="48">
+        <div>
+          <h1 class="noah-header__title">노아 <span class="noah-header__badge">마케팅팀 · SNS</span></h1>
+          <p class="noah-header__subtitle">AI 마케팅 어시스턴트 — 콘텐츠 생성 & 데이터 분석</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="noah-main">
+    <!-- 인증 -->
+    <section class="noah-auth" id="noahAuth">
+      <div class="noah-auth__card">
+        <p>🔐 관리자 키를 입력하세요</p>
+        <form class="noah-auth__form" id="noahAuthForm">
+          <input id="noahKeyInput" type="password" placeholder="RESERVATION_ADMIN_KEY" autocomplete="current-password" required>
+          <button type="submit" class="noah-btn noah-btn--primary">접속</button>
+        </form>
+        <p class="noah-auth__error" id="noahAuthError" hidden></p>
+      </div>
+    </section>
+
+    <!-- 대시보드 (인증 후 표시) -->
+    <div id="noahDashboard" hidden>
+      <!-- ── 모드 탭 ── -->
+      <nav class="noah-tabs" id="noahTabs" aria-label="기능 선택"></nav>
+
+      <!-- ── 입력 섹션 ── -->
+    <section class="noah-workspace">
+      <div class="noah-workspace__input-panel">
+        <div class="noah-workspace__input-header">
+          <span class="noah-workspace__mode-label" id="noahModeLabel">📊 감성 분석</span>
+          <span class="noah-workspace__hint">Ctrl+Enter로 빠르게 생성</span>
+        </div>
+        <textarea
+          class="noah-workspace__textarea"
+          id="noahPrompt"
+          rows="8"
+        ></textarea>
+        <div class="noah-workspace__input-actions">
+          <div class="noah-workspace__examples">
+            <span class="noah-workspace__examples-label">빠른 예시:</span>
+            <button class="noah-example-chip" type="button"
+              onclick="insertExample('인스타 캐러셀 5장: 올인원 패키지 89,000원 소개. 2030 여행러 타깃, Y2K 감성')">
+              📱 패키지 소개 캐러셀
+            </button>
+            <button class="noah-example-chip" type="button"
+              onclick="insertExample('다음 리뷰들의 감성을 분석해줘:\n\n1. 필름 감성 완전 최고! 코닥으로 찍은 사진 진짜 예뻐요\n2. 배송이 하루 늦었어요. 출국 전날이라 불안했음\n3. 숏폼 영상 퀄리티 대박이에요. 친구들이 어디서 만들었냐고 물어봐요\n4. 가격이 좀 비싼 것 같아요. 할인 없나요?\n5. 포장이 너무 예뻐서 언박싱 릴스 찍었어요!')">
+              📊 리뷰 감성 분석
+            </button>
+            <button class="noah-example-chip" type="button"
+              onclick="insertExample('낭만 여행 올인원 패키지 상세 페이지 SEO 최적화. 메타 태그, 본문 구조, FAQ 포함')">
+              🔍 패키지 SEO
+            </button>
+            <button class="noah-example-chip" type="button"
+              onclick="insertExample('여름 휴가 시즌 프로모션 이메일. 기존 고객 대상, 올인원 패키지 10% 할인 안내')">
+              ✉️ 시즌 프로모션
+            </button>
+            <button class="noah-example-chip" id="noahFetchDataBtn" type="button" style="background: var(--primary); color: white; border-color: var(--primary);">
+              📥 실제 데이터 불러오기
+            </button>
+          </div>
+          <button class="noah-btn noah-btn--primary" id="noahGenBtn" type="button">
+            ✨ 생성하기
+          </button>
+        </div>
+      </div>
+
+      <!-- ── 결과 섹션 ── -->
+      <div class="noah-workspace__result-panel">
+        <div class="noah-workspace__result-header">
+          <span>📝 생성 결과</span>
+        </div>
+        <div class="noah-loader" id="noahLoader" hidden>
+          <div class="noah-loader__dots">
+            <span></span><span></span><span></span>
+          </div>
+          <p>노아가 열심히 작성 중이에요...</p>
+        </div>
+        <div class="noah-result" id="noahResult">
+          <div class="noah-result__placeholder">
+            <img src="./assets/noah-avatar.png" alt="노아" width="64" height="64" class="noah-result__placeholder-img">
+            <p>안녕하세요! 마케팅팀 노아입니다 👋</p>
+            <p class="noah-result__placeholder-sub">위에서 모드를 선택하고 프롬프트를 입력하면<br>맞춤 마케팅 콘텐츠를 만들어 드릴게요!</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    </div>
+  </main>
+
+  <script src="./noah.js"></script>
+</body>
+</html>
