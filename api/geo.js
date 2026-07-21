@@ -210,7 +210,8 @@ export default async function handler(req, res) {
           const resvList = await listReservations();
           const target = resvList.find((r) => r.id === id);
           if (target) {
-            const discordWebhookUrl = 'https://discord.com/api/webhooks/1492783938916192397/PLX_rcl8qdukfrK4XtzRL_NcZwxFF3iWgzgmt-b1lc9aID9r_J5QryWOUMGZEnpAQAk5';
+            const discordWebhookUrl = process.env.DISCORD_WEBHOOK_GIO || "";
+            if (!discordWebhookUrl) throw new Error("DISCORD_WEBHOOK_GIO is not configured.");
             const timeFormatted = trackingTime ? new Date(trackingTime).toLocaleString('ko-KR', { hour12: false }) : '시간 미지정';
             const msg = `📦 **운송장 등록 완료 보고장**\n\n**고객 성함**: ${target.name} 님\n**배송 목적지**: ${target.destination}\n**출국 예정일**: ${target.schedule.split('~')[0].trim()}\n**배정된 카메라**: ${target.cameraId || '미지정'}\n**입력 운송장**: \`${trackingNumber}\`\n**우체국 실제 접수시간**: ${timeFormatted}\n\n> "배송 준비" 상태에서 "발송 완료"로 대시보드 상태가 성공적으로 승급되었습니다! 🚚💨`;
             await fetch(discordWebhookUrl, {

@@ -187,8 +187,13 @@ export async function getAgentChatHistory(agentId, limit = 20) {
   if (DATABASE_URL) {
     const currentPool = getPool();
     await ensureAgentChatTable();
+    // 최근 N건을 가져온 뒤 시간순으로 재정렬 (ASC LIMIT은 가장 오래된 N건을 반환하므로 금지)
     const result = await currentPool.query(
-      `SELECT role, content, sender_name AS "senderName", created_at AS "createdAt" FROM agent_chat_history WHERE agent_id = $1 ORDER BY created_at ASC LIMIT $2`,
+      `SELECT role, content, "senderName", "createdAt" FROM (
+         SELECT role, content, sender_name AS "senderName", created_at AS "createdAt"
+         FROM agent_chat_history WHERE agent_id = $1
+         ORDER BY created_at DESC LIMIT $2
+       ) AS recent ORDER BY "createdAt" ASC`,
       [agentId, limit]
     );
     return result.rows;
@@ -957,9 +962,18 @@ function buildReservationText(reservation) {
   ].join("\n");
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildReservationHtml(reservation) {
   const safeMood = reservation.mood
-    ? reservation.mood.replace(/\n/g, "<br>")
+    ? escapeHtml(reservation.mood).replace(/\n/g, "<br>")
     : "-";
 
   return `
@@ -967,15 +981,15 @@ function buildReservationHtml(reservation) {
       <h1 style="font-size: 22px; margin-bottom: 12px;">새 퀵 렌탈 예약이 등록되었습니다.</h1>
       <table style="width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #ece7df;">
         <tbody>
-          <tr><th style="text-align:left; padding:12px; width:170px; background:#faf6f0;">예약 ID</th><td style="padding:12px;">${reservation.id}</td></tr>
-          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">등록 시각</th><td style="padding:12px;">${reservation.createdAt}</td></tr>
-          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">예약 서비스</th><td style="padding:12px;">${reservation.service}</td></tr>
-          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">성함</th><td style="padding:12px;">${reservation.name}</td></tr>
-          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">이메일</th><td style="padding:12px;">${reservation.email}</td></tr>
-          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">연락처</th><td style="padding:12px;">${reservation.phone}</td></tr>
-          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">여행 일정</th><td style="padding:12px;">${reservation.schedule}</td></tr>
-          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">여행지</th><td style="padding:12px;">${reservation.destination}</td></tr>
-          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">원하는 카메라/무드</th><td style="padding:12px;">\n카메라ID: ${reservation.cameraId || '미선택'}<br>추가 박스(19,000원): ${reservation.extraBox || 0}개<br>요청사항: ${safeMood}</td></tr>
+          <tr><th style="text-align:left; padding:12px; width:170px; background:#faf6f0;">예약 ID</th><td style="padding:12px;">${escapeHtml(reservation.id)}</td></tr>
+          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">등록 시각</th><td style="padding:12px;">${escapeHtml(reservation.createdAt)}</td></tr>
+          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">예약 서비스</th><td style="padding:12px;">${escapeHtml(reservation.service)}</td></tr>
+          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">성함</th><td style="padding:12px;">${escapeHtml(reservation.name)}</td></tr>
+          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">이메일</th><td style="padding:12px;">${escapeHtml(reservation.email)}</td></tr>
+          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">연락처</th><td style="padding:12px;">${escapeHtml(reservation.phone)}</td></tr>
+          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">여행 일정</th><td style="padding:12px;">${escapeHtml(reservation.schedule)}</td></tr>
+          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">여행지</th><td style="padding:12px;">${escapeHtml(reservation.destination)}</td></tr>
+          <tr><th style="text-align:left; padding:12px; background:#faf6f0;">원하는 카메라/무드</th><td style="padding:12px;">\n카메라ID: ${escapeHtml(reservation.cameraId || '미선택')}<br>추가 박스(19,000원): ${reservation.extraBox || 0}개<br>요청사항: ${safeMood}</td></tr>
         </tbody>
       </table>
     </div>

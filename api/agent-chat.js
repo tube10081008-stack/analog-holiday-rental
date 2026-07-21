@@ -87,8 +87,8 @@ ${COMPANY_CONTEXT}`
 export default async function handler(req, res) {
   const adminKey = getAdminKey();
 
-  // 키 추출 (헤더, 쿼리, 바디 순)
-  let key = req.headers['x-admin-key'] || req.query.key;
+  // 키 추출 (헤더, 바디 순 — 쿼리 파라미터는 로그에 남으므로 미지원)
+  let key = req.headers['x-admin-key'];
   if (!key && req.method === 'POST') {
     key = req.body?.key;
   }

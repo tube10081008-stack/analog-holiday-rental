@@ -89,6 +89,19 @@ export function parseScheduleDates(schedule) {
 }
 
 /**
+ * 현재 시점에 실제로 나가 있는(물류 버퍼 포함) 홀딩 수를 계산합니다.
+ * available을 예약 총 건수가 아닌 "지금 대여 중인 수량" 기준으로 유지하기 위한 헬퍼.
+ */
+function countActiveHolds(reserved = []) {
+  const now = Date.now();
+  return reserved.filter((r) => {
+    const start = new Date(r.departure).getTime() - 2 * 86400000;
+    const end = new Date(r.returnDate).getTime() + 3 * 86400000;
+    return now >= start && now <= end;
+  }).length;
+}
+
+/**
  * 특정 카메라의 대여 가능 여부 확인
  * 날짜 범위가 겹치는 기존 예약이 있으면 불가 (앞뒤로 배송일/반납 확인의 물류 버퍼 추가: -2일, +3일)
  */
@@ -143,7 +156,7 @@ export async function reserveCamera(cameraId, reservationId, departure, returnDa
   }
 
   camera.reserved.push({ reservationId, departure, returnDate });
-  camera.available = camera.totalStock - camera.reserved.length;
+  camera.available = Math.max(0, camera.totalStock - countActiveHolds(camera.reserved));
 
   await saveInventory(inventory);
   return camera;
@@ -165,7 +178,7 @@ export async function reserveAddToBox(itemId, reservationId, departure, returnDa
   }
 
   item.reserved.push({ reservationId, departure, returnDate });
-  item.available = item.totalStock - item.reserved.length;
+  item.available = Math.max(0, item.totalStock - countActiveHolds(item.reserved));
 
   await saveInventory(inventory);
   return item;
@@ -183,7 +196,7 @@ export async function returnCamera(cameraId, reservationId) {
   }
 
   camera.reserved = camera.reserved.filter((r) => r.reservationId !== reservationId);
-  camera.available = camera.totalStock - camera.reserved.length;
+  camera.available = Math.max(0, camera.totalStock - countActiveHolds(camera.reserved));
 
   await saveInventory(inventory);
   return camera;
@@ -201,7 +214,7 @@ export async function returnAddToBox(itemId, reservationId) {
   }
 
   item.reserved = item.reserved.filter((r) => r.reservationId !== reservationId);
-  item.available = item.totalStock - item.reserved.length;
+  item.available = Math.max(0, item.totalStock - countActiveHolds(item.reserved));
 
   await saveInventory(inventory);
   return item;
@@ -221,7 +234,7 @@ export async function releaseReservationHolds(reservationId) {
     const before = camera.reserved.length;
     camera.reserved = camera.reserved.filter((r) => r.reservationId !== reservationId);
     if (camera.reserved.length < before) {
-      camera.available = camera.totalStock - camera.reserved.length;
+      camera.available = Math.max(0, camera.totalStock - countActiveHolds(camera.reserved));
       released.cameras.push(camera.name);
     }
   }
@@ -233,7 +246,7 @@ export async function releaseReservationHolds(reservationId) {
       (r) => r.reservationId !== reservationId && !r.reservationId.startsWith(`${reservationId}_box_`)
     );
     if (item.reserved.length < before) {
-      item.available = item.totalStock - item.reserved.length;
+      item.available = Math.max(0, item.totalStock - countActiveHolds(item.reserved));
       released.boxes.push({ name: item.name, count: before - item.reserved.length });
     }
   }

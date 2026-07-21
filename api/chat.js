@@ -478,8 +478,8 @@ export default async function handler(request, response) {
     let createdReservation = null;
     let responseCustomerProfile = null;
 
-    // AI 텍스트 내에서 JSON 추출
-    const match = aiText.match(/\[CREATE_RESERVATION:\s*(\{[^}]+\})\s*\]/);
+    // AI 텍스트 내에서 JSON 추출 (mood 등 값에 중괄호가 섞여도 "}]"까지 안전하게 매칭)
+    const match = aiText.match(/\[CREATE_RESERVATION:\s*(\{[\s\S]*?\})\s*\]/);
     if (match) {
       try {
         const payload = JSON.parse(match[1]);
@@ -571,7 +571,8 @@ export default async function handler(request, response) {
 
             // 디스코드 보고 (리나 전용 웹훅)
             try {
-              const discordWebhookUrl = "https://discord.com/api/webhooks/1492783938916192397/PLX_rcl8qdukfrK4XtzRL_NcZwxFF3iWgzgmt-b1lc9aID9r_J5QryWOUMGZEnpAQAk5";
+              const discordWebhookUrl = process.env.DISCORD_WEBHOOK_LINA || "";
+              if (!discordWebhookUrl) throw new Error("DISCORD_WEBHOOK_LINA is not configured.");
               const extraBoxMsg = resObj.extraBox ? ` (추가 소품 박스 ${resObj.extraBox}개)` : '';
               const content = `🚨 **[신규 주문 접수] (Lina AI 직접 응대)**\n> **고객명**: ${resObj.name}\n> **일정**: ${resObj.schedule}\n> **카메라**: ${resObj.cameraId}${extraBoxMsg}\n> **여행지**: ${resObj.destination}\n> **요청무드**: ${resObj.mood || '-'}\n\n✅ 서버 검증 완료 후 정상 접수! - *물류사원 리나*`;
               await fetch(discordWebhookUrl, {

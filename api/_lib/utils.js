@@ -21,7 +21,8 @@ export function readBody(req) {
 
 /**
  * 관리자 인증 키 검증
- * 헤더(Authorization / x-admin-key), 쿼리 파라미터, 바디에서 키를 추출합니다.
+ * 헤더(Authorization / x-admin-key) 또는 바디에서 키를 추출합니다.
+ * 쿼리 파라미터는 액세스 로그/히스토리에 키가 남으므로 지원하지 않습니다.
  */
 export function isAuthorized(req) {
   const key = getAdminKey();
@@ -29,7 +30,6 @@ export function isAuthorized(req) {
   const provided =
     (req.headers.authorization || "").replace("Bearer ", "").trim() ||
     req.headers["x-admin-key"] ||
-    req.query?.key ||
     readBody(req).adminKey ||
     "";
   return provided === key;

@@ -329,7 +329,7 @@ async function openChat(agentId) {
 async function loadChatHistory(agentId) {
   const key = getAdminKey();
   try {
-    const res = await fetch(`/api/agent-chat?agentId=${agentId}&key=${encodeURIComponent(key)}`);
+    const res = await fetch(`/api/agent-chat?agentId=${agentId}`, { headers: { "x-admin-key": key } });
     const data = await res.json();
     
     chatMessages.innerHTML = "";
@@ -530,7 +530,7 @@ async function openBrainDashboard(agentId) {
 async function loadBrainMemories(agentId) {
   const key = getAdminKey();
   try {
-    const res = await fetch(`/api/agent-brain?action=memories&agentId=${agentId}&key=${encodeURIComponent(key)}`);
+    const res = await fetch(`/api/agent-brain?action=memories&agentId=${agentId}`, { headers: { "x-admin-key": key } });
     const data = await res.json();
 
     brainMemoryList.innerHTML = "";

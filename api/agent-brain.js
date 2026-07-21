@@ -19,7 +19,13 @@ const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
 
 let pool;
 function getPool() {
-  if (!pool && DATABASE_URL) pool = new Pool({ connectionString: DATABASE_URL, max: 3 });
+  if (!pool && DATABASE_URL) {
+    pool = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
+      max: 3,
+    });
+  }
   return pool;
 }
 
@@ -35,9 +41,6 @@ function getPool() {
  * POST /api/agent-brain { action: "archiveMemory", memoryId, key }
  */
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
 
   // 쿼리 스트링 안전하게 파싱 (Vercel Node 런타임에 따라 req.query 누락 방지)
@@ -59,7 +62,7 @@ export default async function handler(req, res) {
     // Vercel Cron은 Authorization: Bearer <CRON_SECRET> 헤더를 전송
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = req.headers?.authorization;
-    const adminKey = req.query?.key || req.body?.key;
+    const adminKey = req.headers?.["x-admin-key"] || req.body?.key;
 
     const isCronAuth = cronSecret && authHeader === `Bearer ${cronSecret}`;
     const isAdminAuth = adminKey && adminKey === getAdminKey();
@@ -73,8 +76,8 @@ export default async function handler(req, res) {
     if (action === "self-study") return handleSelfStudy(req, res);
   }
 
-  // 인증 확인
-  const keyParam = req.query?.key || req.body?.key;
+  // 인증 확인 (헤더 또는 바디 — 쿼리 파라미터는 로그에 남으므로 미지원)
+  const keyParam = req.headers?.["x-admin-key"] || req.body?.key;
   const storedKey = getAdminKey();
   if (!keyParam || keyParam !== storedKey) {
     return res.status(401).json({ ok: false, message: "관리자 인증이 필요합니다." });
