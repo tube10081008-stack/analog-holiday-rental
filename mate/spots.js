@@ -256,6 +256,54 @@ export const SPOTS = [
   },
 ];
 
+/**
+ * 여행 스탬프 — 촬영 행동 기반 게이미피케이션
+ * check(shots, cities, spotIds): shots = 전체 컷 배열, cities = 방문 도시명 배열, spotIds = 방문 스팟 ID 배열
+ * 주의: 모든 스탬프는 현재 데이터로 실제 달성 가능해야 합니다 (도시 5곳, 스팟 12곳, 롤 36컷 기준).
+ */
+export const STAMPS = [
+  {
+    id: 'first_frame', emoji: '👣', name: '첫 컷',
+    desc: '여행의 첫 프레임을 기록했어요',
+    check: (shots) => shots.length >= 1,
+  },
+  {
+    id: 'golden_hunter', emoji: '🌇', name: '골든아워 헌터',
+    desc: '오후 5~7시, 필름이 가장 사랑하는 빛을 담았어요',
+    check: (shots) => shots.some((s) => { const h = new Date(s.at).getHours(); return h >= 17 && h < 19; }),
+  },
+  {
+    id: 'night_walker', emoji: '🌙', name: '밤의 사진가',
+    desc: '해가 진 뒤의 한 컷 — 플래시의 시간을 즐겼어요',
+    check: (shots) => shots.some((s) => { const h = new Date(s.at).getHours(); return h >= 20 || h < 5; }),
+  },
+  {
+    id: 'five_frames', emoji: '✨', name: '다섯 장면',
+    desc: '서로 다른 스팟 다섯 곳에서 셔터를 눌렀어요',
+    check: (shots, cities, spotIds) => spotIds.length >= 5,
+  },
+  {
+    id: 'city_hopper', emoji: '🧳', name: '도시 수집가',
+    desc: '두 도시의 빛을 한 롤에 담는 중이에요',
+    check: (shots, cities) => cities.length >= 2,
+  },
+  {
+    id: 'pilgrim', emoji: '⛩️', name: '세 도시 순례자',
+    desc: '세 도시를 필름으로 순례했어요',
+    check: (shots, cities) => cities.length >= 3,
+  },
+  {
+    id: 'half_roll', emoji: '🎞', name: '반 롤',
+    desc: '18컷 — 롤의 절반, 여행도 절반쯤 왔을까요',
+    check: (shots) => shots.length >= 18,
+  },
+  {
+    id: 'full_roll', emoji: '🏆', name: '롤 컴플리트',
+    desc: '36컷을 모두 사용! 현상소에서 만나요',
+    check: (shots) => shots.length >= 36,
+  },
+];
+
 /** 두 좌표 간 거리 (m, Haversine) */
 export function distanceM(lat1, lng1, lat2, lng2) {
   const R = 6371000;

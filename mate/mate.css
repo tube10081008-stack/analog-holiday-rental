@@ -418,3 +418,39 @@ body {
 
 .fade-in { animation: fadeIn .35s ease both; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } }
+
+/* ── 여행 스탬프 ── */
+.stamp-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px;
+  margin: 10px 0 22px;
+}
+.stamp {
+  text-align: center; padding: 13px 4px 11px; border-radius: 14px;
+  border: 1.5px dashed var(--line); color: var(--ink-faint);
+  background: rgba(251,247,238,.5);
+}
+.stamp.earned {
+  border: 1.5px solid var(--ink); background: var(--card);
+  box-shadow: 2px 2px 0 rgba(43,33,24,.85); color: var(--ink);
+  animation: stampIn .4s cubic-bezier(.2,1.4,.4,1);
+}
+@keyframes stampIn { from { transform: scale(.7) rotate(-8deg); opacity: 0; } }
+.stamp-emoji { display: block; font-size: 21px; margin-bottom: 4px; }
+.stamp-name { font-size: 10.5px; font-weight: 600; letter-spacing: .02em; }
+
+/* 스탬프 획득 토스트 */
+.stamp-toast {
+  position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+  z-index: 300; display: flex; align-items: center; gap: 12px;
+  background: var(--film-dark); color: var(--paper);
+  border: 1.5px solid var(--amber); border-radius: 16px;
+  padding: 13px 18px; width: min(90vw, 380px);
+  box-shadow: 0 16px 40px rgba(28,23,18,.45);
+  animation: toastIn .35s cubic-bezier(.2,1.2,.4,1);
+}
+.stamp-toast.leaving { animation: toastOut .5s ease forwards; }
+@keyframes toastIn { from { transform: translate(-50%,-16px); opacity: 0; } }
+@keyframes toastOut { to { transform: translate(-50%,-16px); opacity: 0; } }
+.stamp-toast-emoji { font-size: 26px; }
+.stamp-toast-title { display: block; font-size: 11px; letter-spacing: .18em; color: var(--amber); font-weight: 700; }
+.stamp-toast-name { display: block; font-size: 13px; color: rgba(245,239,227,.9); }

@@ -3,7 +3,7 @@
  * 필름카메라 여행자를 위한 촬영 동반자.
  * "지금(빛+주변 스팟)" / "필름 롤(36컷)" / "여정(기록)" 3개 뷰 + 스팟 상세.
  */
-import { SPOTS, CAMERAS, PERSONAS, distanceM, bearingDeg, getSpotById } from './spots.js';
+import { SPOTS, CAMERAS, PERSONAS, STAMPS, distanceM, bearingDeg, getSpotById } from './spots.js';
 
 const STORE_KEY = 'ah-mate-v1';
 const ROLL_SIZE = 36;
@@ -18,9 +18,10 @@ function loadState() {
       persona: raw.persona || null,
       shots: Array.isArray(raw.shots) ? raw.shots : [],
       scripts: raw.scripts || {}, // 대본 캐시: key → text
+      stamps: Array.isArray(raw.stamps) ? raw.stamps : [],
     };
   } catch {
-    return { camera: null, persona: null, shots: [], scripts: {} };
+    return { camera: null, persona: null, shots: [], scripts: {}, stamps: [] };
   }
 }
 const state = loadState();
@@ -354,6 +355,17 @@ function renderJourney() {
         <div class="card stat-tile"><div class="stat-num">${cities.length}</div><div class="stat-label">도시</div></div>
       </div>
 
+      <p class="section-eyebrow">Travel Stamps</p>
+      <div class="stamp-grid">
+        ${STAMPS.map((st) => {
+          const earned = state.stamps.includes(st.id);
+          return `<div class="stamp ${earned ? 'earned' : ''}" title="${esc(st.desc)}">
+            <span class="stamp-emoji">${earned ? st.emoji : '·'}</span>
+            <span class="stamp-name">${esc(st.name)}</span>
+          </div>`;
+        }).join('')}
+      </div>
+
       ${visitedSpotIds.length > 0 ? `
         <p class="section-eyebrow">Visited Frames</p>
         <div class="spot-list">
@@ -407,11 +419,47 @@ $('#shotSave').addEventListener('click', () => {
     lat: position?.lat ?? null,
     lng: position?.lng ?? null,
   });
+  const newStamps = checkStamps();
   save();
   $('#shotSheet').hidden = true;
   updateRollChip();
   go('roll');
+  if (newStamps.length > 0) showStampToast(newStamps[0]);
 });
+
+/* ═══ 여행 스탬프 (게이미피케이션) ═══ */
+function journeyFacts() {
+  const spotIds = [...new Set(state.shots.map((s) => s.spotId).filter(Boolean))];
+  const cities = [...new Set(spotIds.map((id) => getSpotById(id)?.city).filter(Boolean))];
+  return { spotIds, cities };
+}
+
+function checkStamps() {
+  const { spotIds, cities } = journeyFacts();
+  const earned = [];
+  for (const st of STAMPS) {
+    if (!state.stamps.includes(st.id) && st.check(state.shots, cities, spotIds)) {
+      state.stamps.push(st.id);
+      earned.push(st);
+    }
+  }
+  return earned;
+}
+
+function showStampToast(stamp) {
+  document.querySelector('.stamp-toast')?.remove();
+  const el = document.createElement('div');
+  el.className = 'stamp-toast';
+  el.innerHTML = `
+    <span class="stamp-toast-emoji">${stamp.emoji}</span>
+    <div class="stamp-toast-text">
+      <span class="stamp-toast-title">여행 스탬프 획득!</span>
+      <span class="stamp-toast-name">${esc(stamp.name)} — ${esc(stamp.desc)}</span>
+    </div>`;
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add('leaving'), 3200);
+  setTimeout(() => el.remove(), 3700);
+}
 
 /* ═══ 온보딩 ═══ */
 function showOnboarding() {
