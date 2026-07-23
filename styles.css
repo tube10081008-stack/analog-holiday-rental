@@ -5775,3 +5775,221 @@ textarea {
   }
 }
 
+
+/* ═══════════════════════════════════════════════
+   Hero CTA (전환 유도 버튼)
+   ═══════════════════════════════════════════════ */
+.hero-slide__cta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 26px;
+  flex-wrap: wrap;
+}
+
+.hero-cta-btn {
+  border: none;
+  cursor: pointer;
+  background: #FFFFFF;
+  color: #111111;
+  font-family: var(--font-base);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 15px 26px;
+  border-radius: 999px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.hero-cta-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+}
+
+.hero-cta-link {
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+  padding-bottom: 2px;
+}
+
+.hero-cta-link:hover {
+  border-bottom-color: #FFFFFF;
+}
+
+/* ═══════════════════════════════════════════════
+   홀리데이 메이트 소개 섹션
+   ═══════════════════════════════════════════════ */
+.mate-banner {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 48px;
+  align-items: center;
+  background: #16120D;
+  border-radius: 12px;
+  padding: 64px 56px;
+  position: relative;
+  overflow: hidden;
+}
+
+.mate-banner::after {
+  content: '';
+  position: absolute;
+  top: -40%;
+  right: -10%;
+  width: 50%;
+  height: 180%;
+  background: linear-gradient(100deg, transparent 25%, rgba(216, 154, 43, 0.16) 55%, rgba(192, 101, 91, 0.12) 80%, transparent 95%);
+  transform: rotate(10deg);
+  pointer-events: none;
+}
+
+.mate-banner__eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: #D89A2B;
+  font-weight: 700;
+  margin: 0 0 14px;
+}
+
+.mate-banner__text h2 {
+  color: #F5EFE3;
+  font-size: clamp(24px, 3.4vw, 34px);
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0 0 16px;
+  letter-spacing: -0.01em;
+}
+
+.mate-banner__desc {
+  color: rgba(245, 239, 227, 0.78);
+  font-size: 15px;
+  line-height: 1.75;
+  margin: 0 0 22px;
+  max-width: 52ch;
+}
+
+.mate-banner__points {
+  list-style: none;
+  margin: 0 0 28px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mate-banner__points li {
+  color: rgba(245, 239, 227, 0.9);
+  font-size: 14.5px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.mate-banner__points li span {
+  flex-shrink: 0;
+}
+
+.mate-banner__cta {
+  display: inline-block;
+  background: #D89A2B;
+  color: #16120D;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  padding: 15px 28px;
+  border-radius: 999px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mate-banner__cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(216, 154, 43, 0.35);
+}
+
+.mate-banner__note {
+  color: rgba(245, 239, 227, 0.5);
+  font-size: 12.5px;
+  margin: 14px 0 0;
+}
+
+/* 필름 스트립 목업 */
+.mate-banner__visual {
+  display: flex;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.mate-filmstrip {
+  background: #000000;
+  border-radius: 14px;
+  padding: 14px 16px;
+  transform: rotate(4deg);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+.mate-filmstrip__holes {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+}
+
+.mate-filmstrip__holes::before,
+.mate-filmstrip__holes::after {
+  content: '▪ ▪ ▪ ▪ ▪ ▪ ▪ ▪';
+  color: rgba(245, 239, 227, 0.35);
+  font-size: 8px;
+  letter-spacing: 8px;
+}
+
+.mate-filmstrip__frames {
+  display: flex;
+  gap: 10px;
+  padding: 6px 2px;
+}
+
+.mate-filmstrip__frame {
+  width: 74px;
+  height: 96px;
+  border-radius: 6px;
+  background: linear-gradient(145deg, rgba(216, 154, 43, 0.28), rgba(192, 101, 91, 0.22));
+  border: 1px solid rgba(216, 154, 43, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+}
+
+.mate-filmstrip__chip {
+  position: absolute;
+  bottom: -14px;
+  right: -10px;
+  background: #F5EFE3;
+  color: #16120D;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 8px 14px;
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 900px) {
+  .mate-banner {
+    grid-template-columns: 1fr;
+    padding: 44px 28px;
+    gap: 40px;
+  }
+
+  .mate-banner__visual {
+    order: -1;
+  }
+
+  .hero-slide__cta {
+    gap: 14px;
+  }
+}

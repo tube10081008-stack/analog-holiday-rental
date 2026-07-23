@@ -63,7 +63,7 @@ async function loadDashboard() {
   errEl.hidden = true;
 
   try {
-    const res = await fetch(`/api/alex?action=dashboard&key=${encodeURIComponent(adminKey)}`);
+    const res = await fetch("/api/alex?action=dashboard", { headers: { "x-admin-key": adminKey } });
     const data = await res.json();
 
     if (!res.ok || !data.ok) {

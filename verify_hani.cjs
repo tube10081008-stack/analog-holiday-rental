@@ -24,8 +24,12 @@ async function verify() {
   }
 
   // 2. 하니 웹훅 테스트
-  const webhookUrl = "https://discord.com/api/webhooks/1492798329958961204/tkmM8VTgGXkUdJq-kVQ64biTZOvxUhtog8lYyP0d0EYDsBen5rphTpBwyr99FR-flr5W7";
-  console.log(`\n2. 웹훅 테스트: ${webhookUrl}`);
+  const webhookUrl = process.env.DISCORD_WEBHOOK_HANI || "";
+  if (!webhookUrl) {
+    console.error("❌ DISCORD_WEBHOOK_HANI 환경변수가 없습니다.");
+    return;
+  }
+  console.log(`\n2. 웹훅 테스트: (DISCORD_WEBHOOK_HANI)`);
   try {
     const res = await fetch(webhookUrl, {
       method: "POST",

@@ -16,7 +16,11 @@ let gpaHistoryTableReady;
 export function getPool() {
   const dbUrl = getDbUrl();
   if (!brainPool && dbUrl) {
-    brainPool = new Pool({ connectionString: dbUrl, max: 3 });
+    brainPool = new Pool({
+      connectionString: dbUrl,
+      ssl: dbUrl.includes("localhost") ? false : { rejectUnauthorized: false },
+      max: 3,
+    });
   }
   return brainPool;
 }
@@ -950,34 +954,43 @@ async function buildBusinessContext() {
   if (!pool) return '';
 
   try {
-    let ctx = '';
-    // 오늘 예약 현황
-    const todayRes = await pool.query(
-      `SELECT COUNT(*) as cnt FROM reservations WHERE DATE(rental_date AT TIME ZONE 'Asia/Seoul') = (NOW() AT TIME ZONE 'Asia/Seoul')::date`
-    ).catch(() => ({ rows: [{ cnt: 0 }] }));
-    const todayCount = parseInt(todayRes.rows[0]?.cnt) || 0;
+    // 실제 예약 테이블은 quick_rental_reservations이며 일정은 "YYYY-MM-DD ~ YYYY-MM-DD" 텍스트로 저장됨
+    const result = await pool.query(
+      `SELECT schedule, status FROM quick_rental_reservations
+       WHERE status NOT IN ('cancelled', 'done')
+       ORDER BY created_at DESC LIMIT 300`
+    );
 
-    // 활성 예약 수
-    const activeRes = await pool.query(
-      `SELECT COUNT(*) as cnt FROM reservations WHERE status IN ('confirmed','active','준비중')`
-    ).catch(() => ({ rows: [{ cnt: 0 }] }));
-    const activeCount = parseInt(activeRes.rows[0]?.cnt) || 0;
+    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const todayStr = `${kstNow.getFullYear()}-${String(kstNow.getMonth() + 1).padStart(2, '0')}-${String(kstNow.getDate()).padStart(2, '0')}`;
+    const normalize = (d) => {
+      const m = d.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+      return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null;
+    };
 
-    // 오늘 반납 예정
-    const returnRes = await pool.query(
-      `SELECT COUNT(*) as cnt FROM reservations WHERE DATE(return_date AT TIME ZONE 'Asia/Seoul') = (NOW() AT TIME ZONE 'Asia/Seoul')::date`
-    ).catch(() => ({ rows: [{ cnt: 0 }] }));
-    const returnCount = parseInt(returnRes.rows[0]?.cnt) || 0;
-
-    if (todayCount > 0 || activeCount > 0 || returnCount > 0) {
-      ctx += `\n═══════════════════════════════════\n📈 오늘의 비즈니스 현황\n═══════════════════════════════════\n`;
-      if (todayCount > 0) ctx += `📦 오늘 출고 예약: ${todayCount}건\n`;
-      if (returnCount > 0) ctx += `📥 오늘 반납 예정: ${returnCount}건\n`;
-      if (activeCount > 0) ctx += `📋 전체 활성 예약: ${activeCount}건\n`;
+    let departCount = 0;
+    let returnCount = 0;
+    let activeCount = 0;
+    for (const row of result.rows) {
+      const dates = String(row.schedule || '').match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/g);
+      if (!dates || dates.length < 2) continue;
+      const departure = normalize(dates[0]);
+      const returnDate = normalize(dates[1]);
+      if (!departure || !returnDate) continue;
+      if (departure === todayStr) departCount++;
+      if (returnDate === todayStr) returnCount++;
+      if (departure <= todayStr && todayStr <= returnDate) activeCount++;
     }
+
+    if (departCount === 0 && returnCount === 0 && activeCount === 0) return '';
+
+    let ctx = `\n═══════════════════════════════════\n📈 오늘의 비즈니스 현황\n═══════════════════════════════════\n`;
+    if (departCount > 0) ctx += `📦 오늘 출국(출고) 예약: ${departCount}건\n`;
+    if (returnCount > 0) ctx += `📥 오늘 귀국(반납 예정): ${returnCount}건\n`;
+    if (activeCount > 0) ctx += `📋 현재 여행 중인 예약: ${activeCount}건\n`;
     return ctx;
   } catch {
-    return ''; // reservations 테이블 없으면 조용히 스킵
+    return ''; // 테이블 없으면 조용히 스킵
   }
 }
 
@@ -1024,7 +1037,7 @@ function detectEmotionalState(recentMessages) {
 
   const positive = ['좋아', '잘했', '고마워', '훌륭', '멋져', '최고', '좋네', '감사', '대단', '완벽', '사랑', '칭찬'].filter(k => text.includes(k)).length;
   const negative = ['왜', '문제', '실수', '답답', '안돼', '못해', '짜증', '화가', '이상', '잘못', '걱정', '심각'].filter(k => text.includes(k)).length;
-  const urgent = ['급해', '빨리', '지금', '당장', '바로', '긴급', '서둘러', '즉시', '당장'].filter(k => text.includes(k)).length;
+  const urgent = ['급해', '빨리', '지금', '당장', '바로', '긴급', '서둘러', '즉시'].filter(k => text.includes(k)).length;
 
   let ctx = '';
   if (urgent >= 1) {

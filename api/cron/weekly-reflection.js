@@ -19,7 +19,13 @@ const AGENT_ICONS = { hani: '🎨', geo: '📦', noah: '📈', lina: '📋', ale
 
 let pool;
 function getPool() {
-  if (!pool && DATABASE_URL) pool = new Pool({ connectionString: DATABASE_URL, max: 3 });
+  if (!pool && DATABASE_URL) {
+    pool = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
+      max: 3,
+    });
+  }
   return pool;
 }
 
