@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#12161B" />
+  <title>윌리엄스 스쿨 — 대표 과정</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./school.css" />
+</head>
+<body>
+  <!-- 로그인 -->
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <p class="gate-eyebrow">WILLIAMS SCHOOL</p>
+      <h1 class="gate-title">대표 과정</h1>
+      <p class="gate-sub">제임스 윌리엄스 명예교수의 1:1 지도<br/>AI 활용 역량 × AI 시대 사업 역량</p>
+      <input id="keyInput" type="password" placeholder="관리자 키" autocomplete="current-password" />
+      <button id="enterBtn" class="btn-primary">강의실 입장</button>
+      <p id="gateError" class="gate-error" hidden></p>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-sub">WILLIAMS SCHOOL</span>
+        <span class="brand-main">대표 과정</span>
+      </div>
+      <div class="stat-strip" id="statStrip"></div>
+    </header>
+
+    <nav class="tabs">
+      <button data-tab="today" class="active">오늘의 강의</button>
+      <button data-tab="history">성적</button>
+      <button data-tab="rank">예측 랭킹</button>
+    </nav>
+
+    <main id="view" class="view"></main>
+  </div>
+
+  <script type="module" src="./school.js"></script>
+</body>
+</html>

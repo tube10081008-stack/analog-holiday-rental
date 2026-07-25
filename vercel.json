@@ -1,15 +1,19 @@
 {
+  "functions": {
+    "api/agent-brain.js": { "maxDuration": 60 },
+    "api/cron.js": { "maxDuration": 60 }
+  },
   "crons": [
     {
-      "path": "/api/cron/daily-report",
+      "path": "/api/cron?job=daily",
       "schedule": "0 0 * * 1-5"
     },
     {
-      "path": "/api/cron/evening-report",
+      "path": "/api/cron?job=evening",
       "schedule": "0 9 * * 1-5"
     },
     {
-      "path": "/api/cron/weekly-reflection",
+      "path": "/api/cron?job=weekly",
       "schedule": "0 0 * * 1"
     },
     {

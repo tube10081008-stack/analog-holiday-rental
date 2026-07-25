@@ -9,7 +9,13 @@ import {
   saveSharedKnowledge,
   ensureAllBrainTables,
 } from "./_lib/agent-brain.js";
-import { getNextTopic, getCurriculumSummary } from "./_lib/curriculum.js";
+import {
+  getPredictionStats,
+  getOpenPredictions,
+  resolvePrediction,
+  ensurePredictionsTable,
+} from "./_lib/predictions.js";
+import { getNextTopic, getCurriculumSummary, getRoundDirective } from "./_lib/curriculum.js";
 import { runAllAutonomousStudy, runAutonomousStudy } from "./_lib/autonomous-study.js";
 import { GoogleGenAI } from "@google/genai";
 import pg from "pg";
@@ -57,6 +63,11 @@ export default async function handler(req, res) {
   }
 
   // Yale 학습 / 자율 학습 세션 — Vercel Cron 인증 확인
+  //
+  // ⏰ 크론 실행 시각 (vercel.json은 JSON이라 주석을 넣을 수 없어 여기에 기록):
+  //   action=study      "0 9 * * *" (UTC) = 매일 18:00 KST — 예일 커리큘럼 학습
+  //   action=self-study "0 3 * * *" (UTC) = 매일 12:00 KST — 자율 학습 + 예측 판정
+  //   ※ 코드 곳곳의 '야간 학습' 표현은 과거 잔재이며 실제로는 낮 시간대에 실행됩니다.
   const action = req.query?.action || req.body?.action;
   if (action === "study" || action === "self-study") {
     // Vercel Cron은 Authorization: Bearer <CRON_SECRET> 헤더를 전송
@@ -84,6 +95,7 @@ export default async function handler(req, res) {
   }
 
   await ensureAllBrainTables();
+  await ensurePredictionsTable();
 
   if (req.method === "GET") {
     return handleGet(req, res);
@@ -135,6 +147,17 @@ async function handleGet(req, res) {
       case "shared": {
         const shared = await getSharedKnowledge("all", 50);
         return res.status(200).json({ ok: true, shared });
+      }
+
+      case "predictions": {
+        // 🔮 예측 장부 조회 — 미판정 목록 + 실력 통계
+        const targets = agentId ? [agentId] : AGENTS;
+        const data = await Promise.all(targets.map(async (id) => ({
+          agentId: id,
+          stats: await getPredictionStats(id),
+          open: await getOpenPredictions(id, 20),
+        })));
+        return res.status(200).json({ ok: true, predictions: data });
       }
 
       default:
@@ -197,8 +220,18 @@ async function handlePost(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      case "resolvePrediction": {
+        // 🔮 수동 판정 — 런칭 후 자사 데이터로 확인하는 launch 예측용
+        // outcome: true(적중) | false(빗나감) | null(판정 불가 → 무효)
+        const { predictionId, outcome, note = '' } = req.body;
+        if (!predictionId) return res.status(400).json({ ok: false, message: "predictionId 필요" });
+        const result = await resolvePrediction(predictionId, outcome ?? null, note);
+        if (!result) return res.status(404).json({ ok: false, message: "예측을 찾을 수 없습니다." });
+        return res.status(200).json({ ok: true, result });
+      }
+
       default:
-        return res.status(400).json({ ok: false, message: "올바른 action 필요 (addMemory, updateMemory, deleteMemory, archiveMemory)" });
+        return res.status(400).json({ ok: false, message: "올바른 action 필요 (addMemory, updateMemory, deleteMemory, archiveMemory, resolvePrediction)" });
     }
   } catch (err) {
     console.error("[Brain API POST Error]:", err);
@@ -214,14 +247,34 @@ async function handleStudySession(req, res) {
   const AGENTS = ['hani', 'geo', 'noah', 'lina', 'alex'];
   const agentParam = req.query?.agent || 'all';
   const count = parseInt(req.query?.count || '2');
-  const targets = agentParam === 'all' ? AGENTS : AGENTS.filter(a => a === agentParam);
+
+  // ⏱️ 서버리스 시간 한계(Hobby 60초) 대응 — 자율학습과 동일한 일자별 로테이션.
+  // 5명 × count건을 한 번에 돌리면 타임아웃되므로 매일 순번을 밀어 나눠 수행합니다.
+  const PER_RUN = Math.max(1, Number(process.env.YALE_AGENTS_PER_RUN) || 2);
+  const BUDGET_MS = Number(process.env.YALE_BUDGET_MS) || 45000;
+  const t0 = Date.now();
+
+  let targets;
+  if (agentParam === 'all') {
+    const dayIndex = Math.floor(Date.now() / 86400000);
+    const start = dayIndex % AGENTS.length;
+    targets = [...AGENTS.slice(start), ...AGENTS.slice(0, start)].slice(0, PER_RUN);
+  } else {
+    targets = AGENTS.filter(a => a === agentParam);
+  }
   if (!targets.length) return res.status(400).json({ error: `Unknown agent: ${agentParam}` });
 
-  console.log(`[Yale] 🎓 학습 세션: ${targets.join(', ')} / ${count}건씩`);
+  console.log(`[Yale] 🎓 학습 세션: ${targets.join(', ')} / ${count}건씩 (로테이션)`);
   const results = [];
 
   for (const agentId of targets) {
+    if (Date.now() - t0 > BUDGET_MS) {
+      console.warn(`[Yale] ⏱️ 시간 예산 초과 — ${agentId} 이월`);
+      results.push({ agent: agentId, status: 'deferred' });
+      continue;
+    }
     for (let i = 0; i < count; i++) {
+      if (Date.now() - t0 > BUDGET_MS) break;
       try {
         const studyCount = await getYaleStudyCount(agentId);
         const topic = getNextTopic(agentId, studyCount);
@@ -250,7 +303,7 @@ async function getYaleStudyCount(agentId) {
   const p = getPool();
   if (!p) return 0;
   try {
-    const res = await p.query(`SELECT COUNT(*) as cnt FROM agent_memories WHERE agent_id = $1 AND title LIKE '%[Yale]%'`, [agentId]);
+    const res = await p.query(`SELECT COUNT(*) as cnt FROM agent_memories WHERE agent_id = $1 AND title LIKE '%[Yale%'`, [agentId]);
     return parseInt(res.rows[0].cnt) || 0;
   } catch { return 0; }
 }
@@ -270,11 +323,17 @@ async function generateStudyKnowledge(agentId, topic, existingTitles) {
   const ai = new GoogleGenAI({ apiKey: key });
   const curriculum = getCurriculumSummary(agentId);
 
+  const round = getRoundDirective(topic.round || 1);
+
   const prompt = `당신은 ${topic.school}의 ${topic.semester} 담당 교수입니다.
 학생 '${topic.agentName}'은 '아날로그 홀리데이'라는 여행 장비 렌탈 서비스 회사의 AI 에이전트입니다.
 
 ## 수업 주제: ${topic.title}
 적용: ${topic.focus} / 학위: ${curriculum.degree}
+
+## 이번 수업의 단계: ${round.label}
+${round.directive}
+이 학생은 이 주제를 ${topic.round || 1}번째로 다루고 있습니다. 단계에 맞는 깊이로 가르치세요.
 
 ## 기존 지식 (중복 금지)
 ${existingTitles.slice(-15).map(t => `- ${t}`).join('\n')}
@@ -293,7 +352,7 @@ ${existingTitles.slice(-15).map(t => `- ${t}`).join('\n')}
 
   return {
     memory_type: 'fact',
-    title: `[Yale] ${parsed.title}`,
+    title: `[Yale${(topic.round || 1) > 1 ? ' R' + topic.round : ''}] ${parsed.title}`,
     content: parsed.content,
     importance: Math.min(Math.max(parsed.importance || 7, 6), 9),
     tags: ['yale_school', agentId]

@@ -287,14 +287,47 @@ export function getNextTopic(agentId, completedCount) {
 
   // 완료된 수만큼 건너뛰고 다음 토픽 반환
   const idx = completedCount % allTopics.length;
-  const isSecondRound = completedCount >= allTopics.length;
+  const round = Math.floor(completedCount / allTopics.length) + 1;
 
   return {
     ...allTopics[idx],
     topicIndex: idx,
     totalTopics: allTopics.length,
-    isAdvanced: isSecondRound,  // 2회차부터는 심화 학습
-    progress: `${Math.min(completedCount, allTopics.length)}/${allTopics.length}`
+    round,                          // 1회차 = 기초, 2회차 이상 = 심화
+    isAdvanced: round >= 2,
+    // 진도 표시: 이전에는 1회차 완주 후 영원히 "20/20"으로 굳어 루프 중인 상태를 숨겼습니다
+    progress: `${round}회차 ${idx + 1}/${allTopics.length}`
+  };
+}
+
+/**
+ * 회차별 심화 지시 — 같은 주제를 반복하더라도 접근 각도를 바꿉니다.
+ * 이전에는 isAdvanced 플래그가 정의만 되고 프롬프트에 전혀 쓰이지 않아,
+ * 2회차 이후 학습이 1회차와 완전히 동일한 프롬프트로 수행되었습니다.
+ * 그 결과 모델은 같은 주제를 제목만 바꿔 변주해야 했고 내용이 갈수록 묽어졌습니다.
+ */
+export function getRoundDirective(round) {
+  if (round <= 1) {
+    return {
+      label: '1회차 · 기초',
+      directive: '핵심 개념과 표준 프레임워크를 정확히 정리하세요. 정의·구성요소·기본 공식 중심.',
+    };
+  }
+  if (round === 2) {
+    return {
+      label: '2회차 · 적용',
+      directive: '개념 설명은 생략하고 **실행 절차**에 집중하세요. 이 주제를 아날로그 홀리데이에 적용하는 구체적 단계, 필요한 데이터, 판단 기준을 제시하세요. 1회차와 같은 정의를 반복하면 실격입니다.',
+    };
+  }
+  if (round === 3) {
+    return {
+      label: '3회차 · 비판',
+      directive: '이 이론/기법의 **한계와 반례**를 다루세요. 어떤 조건에서 실패하는가, 최신 연구가 무엇을 반박했는가, 소규모 렌탈 사업에 적용할 때의 함정은 무엇인가. 교과서적 서술은 실격입니다.',
+    };
+  }
+  return {
+    label: `${round}회차 · 통합`,
+    directive: '이 주제를 **다른 도메인과 결합**하세요. 인접 분야의 기법을 접목하거나, 지금까지 배운 다른 주제와 연결해 아날로그 홀리데이만의 독자적 접근을 설계하세요. 단독 주제 서술은 실격입니다.',
   };
 }
 

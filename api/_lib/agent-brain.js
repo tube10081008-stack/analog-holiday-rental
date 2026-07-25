@@ -402,6 +402,15 @@ export async function reinforceMemories(agentId, usedMemoryIds) {
 export async function saveStudyArchive(agentId, topic, essay, evaluation) {
   const pool = getPool();
   if (!pool) return;
+
+  // 🛡️ 채점 실패(JSON 파싱 오류)는 '학업 실패'가 아니라 '결측'입니다.
+  // 0점으로 기록하면 누적 GPA·약점 도메인·메타인지 프롬프트가 모두 오염되고,
+  // 다음 회차가 지난 처방 대신 빈 값을 물려받습니다. 기록하지 않고 건너뜁니다.
+  if (evaluation?.parseError) {
+    console.warn(`[Brain] ⏭️ ${agentId}: 채점 파싱 실패 — 성적/아카이브 미기록 (결측 처리)`);
+    return;
+  }
+
   const archiveId = `sa_${agentId}_${Date.now()}`;
   try {
     await pool.query(
@@ -442,8 +451,8 @@ export async function getYaleProgress(agentId) {
   const pool = getPool();
   if (!pool) return { count: 0, recentTopics: [] };
   try {
-    const countRes = await pool.query(`SELECT COUNT(*) as cnt FROM agent_memories WHERE agent_id = $1 AND title LIKE '%[Yale]%'`, [agentId]);
-    const recentRes = await pool.query(`SELECT title FROM agent_memories WHERE agent_id = $1 AND title LIKE '%[Yale]%' ORDER BY created_at DESC LIMIT 5`, [agentId]);
+    const countRes = await pool.query(`SELECT COUNT(*) as cnt FROM agent_memories WHERE agent_id = $1 AND title LIKE '%[Yale%'`, [agentId]);
+    const recentRes = await pool.query(`SELECT title FROM agent_memories WHERE agent_id = $1 AND title LIKE '%[Yale%' ORDER BY created_at DESC LIMIT 5`, [agentId]);
     return {
       count: parseInt(countRes.rows[0]?.cnt) || 0,
       recentTopics: recentRes.rows.map(r => r.title.replace('[Yale] ', '')),
@@ -468,6 +477,35 @@ export async function getLastRecommendation(agentId) {
       [agentId]
     );
     return res.rows[0] || null;
+  } catch { return null; }
+}
+
+/**
+ * 🎓 지난 회차 교수의 '처방 전체'를 조회합니다 (튜터링 루프 폐쇄용).
+ * recommendation만 보던 기존 방식과 달리 진단·수업·과제를 함께 반환해,
+ * ① 학생이 지난 수업을 실제로 전달받고 ② 교수가 이행 여부를 검증할 수 있게 합니다.
+ * 구 스키마(assignment 없이 recommendation만 있는 아카이브)와도 호환됩니다.
+ */
+export async function getLastPrescription(agentId) {
+  const pool = getPool();
+  if (!pool) return null;
+  try {
+    const res = await pool.query(
+      `SELECT topic,
+              overall_gpa,
+              evaluation->>'diagnosis'      AS diagnosis,
+              evaluation->>'instruction'    AS instruction,
+              evaluation->>'assignment'     AS assignment,
+              evaluation->>'recommendation' AS recommendation
+       FROM study_archives
+       WHERE agent_id = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [agentId]
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    // 구 스키마 폴백: assignment가 없으면 recommendation을 과제로 사용
+    return { ...row, assignment: row.assignment || row.recommendation || '' };
   } catch { return null; }
 }
 
@@ -1138,16 +1176,24 @@ async function buildYaleContext(agentId) {
 // ═══════════════════════════════════════════════════
 
 /**
- * P3: 최근 학습 교훈을 에이전트 시스템 프롬프트에 주입
- * 학습 결과가 실제 고객 응대/업무 수행에 반영되도록 하는 핵심 연결 고리
+ * 최근 '실무' 교훈을 에이전트 시스템 프롬프트에 주입합니다.
+ *
+ * ⚠️ 학사 평가/튜터링 기록은 제외합니다.
+ * 이전에는 자율학습 평가 결과("GPA 3.7/4.3. 교수 소견… [다음 과제: 베이지안 추론…]")가
+ * 모든 대화에 "고객 응대 시 반드시 참고하세요"로 주입되어, 리나가 환불 문의를 받는
+ * 순간에도 자기 성적과 다음 과제를 참조하고 있었습니다. 토큰을 먹고 페르소나를 흐립니다.
+ * 학사 기록은 인출 시험(retrieval.js)에서 별도로 활용되므로 저장은 유지하되 대화 주입만 차단합니다.
  */
 async function buildRecentLessonsContext(agentId) {
   const pool = getPool();
   if (!pool) return '';
   try {
     const res = await pool.query(
-      `SELECT title, content, created_at FROM agent_memories 
-       WHERE agent_id = $1 AND memory_type = 'lesson' 
+      `SELECT title, content, created_at FROM agent_memories
+       WHERE agent_id = $1
+         AND memory_type = 'lesson'
+         AND is_archived = FALSE
+         AND NOT (tags && ARRAY['tutoring','self_study','yale_school','evaluation','gpa']::text[])
        ORDER BY created_at DESC LIMIT 3`,
       [agentId]
     );
@@ -1156,7 +1202,7 @@ async function buildRecentLessonsContext(agentId) {
       const date = new Date(r.created_at).toLocaleDateString('ko-KR');
       return `- ${date}: ${r.content.substring(0, 150)}`;
     }).join('\n');
-    return `\n\n## 📋 최근 학습 교훈 (실무 적용 필수)\n아래는 윌리엄스 교수의 최근 평가에서 도출된 핵심 교훈입니다. 고객 응대 시 반드시 참고하세요.\n${lessons}\n`;
+    return `\n\n## 📋 실무에서 얻은 교훈\n과거 업무 중 겪은 문제에서 배운 점입니다. 같은 실수를 반복하지 마세요.\n${lessons}\n`;
   } catch { return ''; }
 }
 
