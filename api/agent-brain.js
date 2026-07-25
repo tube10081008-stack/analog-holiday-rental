@@ -247,14 +247,34 @@ async function handleStudySession(req, res) {
   const AGENTS = ['hani', 'geo', 'noah', 'lina', 'alex'];
   const agentParam = req.query?.agent || 'all';
   const count = parseInt(req.query?.count || '2');
-  const targets = agentParam === 'all' ? AGENTS : AGENTS.filter(a => a === agentParam);
+
+  // ⏱️ 서버리스 시간 한계(Hobby 60초) 대응 — 자율학습과 동일한 일자별 로테이션.
+  // 5명 × count건을 한 번에 돌리면 타임아웃되므로 매일 순번을 밀어 나눠 수행합니다.
+  const PER_RUN = Math.max(1, Number(process.env.YALE_AGENTS_PER_RUN) || 2);
+  const BUDGET_MS = Number(process.env.YALE_BUDGET_MS) || 45000;
+  const t0 = Date.now();
+
+  let targets;
+  if (agentParam === 'all') {
+    const dayIndex = Math.floor(Date.now() / 86400000);
+    const start = dayIndex % AGENTS.length;
+    targets = [...AGENTS.slice(start), ...AGENTS.slice(0, start)].slice(0, PER_RUN);
+  } else {
+    targets = AGENTS.filter(a => a === agentParam);
+  }
   if (!targets.length) return res.status(400).json({ error: `Unknown agent: ${agentParam}` });
 
-  console.log(`[Yale] 🎓 학습 세션: ${targets.join(', ')} / ${count}건씩`);
+  console.log(`[Yale] 🎓 학습 세션: ${targets.join(', ')} / ${count}건씩 (로테이션)`);
   const results = [];
 
   for (const agentId of targets) {
+    if (Date.now() - t0 > BUDGET_MS) {
+      console.warn(`[Yale] ⏱️ 시간 예산 초과 — ${agentId} 이월`);
+      results.push({ agent: agentId, status: 'deferred' });
+      continue;
+    }
     for (let i = 0; i < count; i++) {
+      if (Date.now() - t0 > BUDGET_MS) break;
       try {
         const studyCount = await getYaleStudyCount(agentId);
         const topic = getNextTopic(agentId, studyCount);

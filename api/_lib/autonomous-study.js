@@ -850,7 +850,7 @@ export async function runAutonomousStudy(agentId) {
 // 디스코드 평가 브리핑 전송
 // ═══════════════════════════════════════════════════
 
-async function sendEvalToDiscord(results, resolution = null, skipped = []) {
+async function sendEvalToDiscord(results, resolution = null, skipped = [], todays = [], resting = []) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_STUDY;
   if (!webhookUrl) {
     console.log('[Self-Study] DISCORD_WEBHOOK_STUDY 미설정, 디스코드 브리핑 스킵');
@@ -1052,8 +1052,11 @@ async function sendEvalToDiscord(results, resolution = null, skipped = []) {
       evalCount > 0
         ? `📈 **오늘의 전체 평균 GPA: ${Math.round((totalGPA / evalCount) * 10) / 10} / 4.3**\n🎓 평가 완료: **${evalCount}건** ${failCount > 0 ? `| ⚠️ 실패: **${failCount}건**` : ''}`
         : `⚠️ 오늘은 평가가 완료된 에이전트가 없습니다. ${failCount > 0 ? `(${failCount}건 실패)` : ''}`,
+      resting.length > 0
+        ? `\n🔄 오늘은 **${todays.map(id => AGENT_ROLES[id]?.name || id).join(', ')}** 차례입니다. (대기: ${resting.map(id => AGENT_ROLES[id]?.name || id).join(', ')} — 내일 순번)`
+        : '',
       skipped.length > 0
-        ? `\n⏱️ 시간 예산 초과로 **${skipped.map(id => AGENT_ROLES[id]?.name || id).join(', ')}** 은(는) 다음 회차로 이월되었습니다.`
+        ? `⏱️ 시간 예산 초과로 **${skipped.map(id => AGENT_ROLES[id]?.name || id).join(', ')}** 은(는) 다음 회차로 이월되었습니다.`
         : '',
     ].filter(Boolean).join('\n'),
     color: evalCount > 0 ? 0x10B981 : 0xEF4444,
@@ -1249,23 +1252,33 @@ export async function runAllAutonomousStudy() {
   const AGENTS = ['hani', 'geo', 'noah', 'lina', 'alex'];
   const results = [];
 
-  // ⏱️ 전체 시간 예산 — 서버리스 타임아웃으로 브리핑 자체가 유실되는 것을 막습니다.
-  // 예산을 넘기면 남은 에이전트를 건너뛰고, 여기까지의 결과로 브리핑을 반드시 전송합니다.
-  // (각 에이전트의 학습 결과는 개별적으로 DB에 커밋되므로 유실되지 않습니다)
-  const BUDGET_MS = Number(process.env.STUDY_BUDGET_MS) || 230000;
+  // ⏱️ 서버리스 실행 시간 한계(Hobby 60초) 안에서 안전하게 끝내기 위한 설계.
+  //
+  // 5명을 한 번에 돌리면 어떤 예산으로도 완주가 불가능하므로 '일자별 로테이션'으로 나눕니다.
+  // 매일 순번을 한 칸씩 밀어 전원이 공평하게 학습하며, 이는 간격 반복(spaced repetition)의
+  // 학습 리듬과도 잘 맞습니다. Pro 플랜으로 올리면 환경변수만 키우면 됩니다.
+  const BUDGET_MS = Number(process.env.STUDY_BUDGET_MS) || 45000;
+  const PER_RUN = Math.max(1, Number(process.env.STUDY_AGENTS_PER_RUN) || 2);
   const startedAt = Date.now();
   const elapsed = () => Date.now() - startedAt;
   const skipped = [];
 
+  const dayIndex = Math.floor(Date.now() / 86400000);
+  const start = dayIndex % AGENTS.length;
+  const rotated = [...AGENTS.slice(start), ...AGENTS.slice(0, start)];
+  const todays = rotated.slice(0, PER_RUN);
+  const resting = rotated.slice(PER_RUN);
+  console.log(`[Self-Study] 🔄 오늘의 학습자: ${todays.map(a => AGENT_ROLES[a]?.name).join(', ')} (대기: ${resting.map(a => AGENT_ROLES[a]?.name).join(', ')})`);
+
   // ── Step 0: 지난 예측부터 채점 — 오늘 학습의 평가 입력이 됩니다 ──
   let resolution = { checked: 0, resolved: 0, voided: 0, deferred: 0, details: [] };
   try {
-    resolution = await resolveDuePredictions(4, 70000);
+    resolution = await resolveDuePredictions(2, 15000);
   } catch (err) {
     console.error('[Predictions] 자동 판정 실패:', err.message);
   }
 
-  for (const agentId of AGENTS) {
+  for (const agentId of todays) {
     if (elapsed() > BUDGET_MS) {
       skipped.push(agentId);
       console.warn(`[Self-Study] ⏱️ 시간 예산 초과 — ${AGENT_ROLES[agentId]?.name || agentId} 학습을 다음 회차로 이월`);
@@ -1273,7 +1286,7 @@ export async function runAllAutonomousStudy() {
     }
     const result = await runAutonomousStudy(agentId);
     results.push(result);
-    await new Promise(r => setTimeout(r, 2000)); // 에이전트 간 쿨다운
+    await new Promise(r => setTimeout(r, 1000)); // 에이전트 간 쿨다운
   }
 
   const totalLearned = results.reduce((s, r) => 
@@ -1282,13 +1295,13 @@ export async function runAllAutonomousStudy() {
 
   // 🏛️ 평가 브리핑 디스코드 전송
   try {
-    await sendEvalToDiscord(results, resolution, skipped);
+    await sendEvalToDiscord(results, resolution, skipped, todays, resting);
   } catch (err) {
     console.error('[Self-Study] 디스코드 브리핑 전송 실패:', err.message);
   }
 
   console.log(`[Self-Study] 🎓 완료: ${totalLearned}건 학습, 예측 판정 ${resolution.resolved}건, 소요 ${Math.round(elapsed() / 1000)}초${skipped.length ? `, 이월 ${skipped.length}명` : ''}`);
-  return { session: new Date().toISOString(), totalLearned, resolution, skipped, elapsedMs: elapsed(), results };
+  return { session: new Date().toISOString(), totalLearned, resolution, todays, resting, skipped, elapsedMs: elapsed(), results };
 }
 
 export { AGENT_ROLES, PROFESSOR };
