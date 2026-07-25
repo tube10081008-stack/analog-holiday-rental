@@ -63,6 +63,11 @@ export default async function handler(req, res) {
   }
 
   // Yale 학습 / 자율 학습 세션 — Vercel Cron 인증 확인
+  //
+  // ⏰ 크론 실행 시각 (vercel.json은 JSON이라 주석을 넣을 수 없어 여기에 기록):
+  //   action=study      "0 9 * * *" (UTC) = 매일 18:00 KST — 예일 커리큘럼 학습
+  //   action=self-study "0 3 * * *" (UTC) = 매일 12:00 KST — 자율 학습 + 예측 판정
+  //   ※ 코드 곳곳의 '야간 학습' 표현은 과거 잔재이며 실제로는 낮 시간대에 실행됩니다.
   const action = req.query?.action || req.body?.action;
   if (action === "study" || action === "self-study") {
     // Vercel Cron은 Authorization: Bearer <CRON_SECRET> 헤더를 전송
