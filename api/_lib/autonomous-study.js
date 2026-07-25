@@ -20,6 +20,15 @@ import {
   getWeakestDomain,
   getPastTopics,
 } from "./agent-brain.js";
+import {
+  extractPredictions,
+  savePredictions,
+  getPredictionStats,
+  getRecentResolved,
+  getDuePredictions,
+  resolvePrediction,
+  ensurePredictionsTable,
+} from "./predictions.js";
 
 function getGeminiKey() { return process.env.GEMINI_API_KEY; }
 
@@ -250,6 +259,16 @@ ${PROFESSOR.personality}
 다음 학습 주제 1개. 단, 주제명만 던지지 말고 **반드시 포함해야 할 요소 2~3가지**를 함께 지정하세요.
 예: "○○ 분석 — 단, 반드시 (a) 표본 수를 명시하고 (b) 반대 가설을 1개 검토할 것"
 
+### predictionCritique (예측 품질 심사) 🔮
+학생이 제출한 예측을 **정확도가 아니라 '품질'** 기준으로 심사하세요.
+맞았는지 틀렸는지는 현실이 채점하므로 당신의 몫이 아닙니다. 당신이 볼 것은 세 가지입니다:
+1) **반증 가능성**: 참/거짓이 명확히 갈리는가? 판정 방법이 누가 봐도 같은 결론을 내는가?
+   모호하게 써서 틀릴 위험을 피하려는 시도(회피성 예측)는 강하게 지적하세요.
+2) **위험 감수**: 뻔한 것(확률 0.9로 당연한 사실)만 예측하면 점수를 얻을 수 없습니다.
+   전문성이 있어야만 알 수 있는, 판단이 갈리는 명제를 골랐는가?
+3) **확률의 정직성**: 누적 캘리브레이션 오차가 크면 확률을 과신·과소평가하고 있다는 뜻입니다.
+예측 미제출은 회피이므로 '실증 수행' 도메인을 강등하세요.
+
 ### priorCheck (지난 처방 이행 검증)
 입력에 [지난 회차 처방]이 주어진 경우, 학생이 그 가르침을 실제로 적용했는지 판정하세요.
 적용했으면 구체적으로 인정하고, 안 했으면 지적하세요. 지난 처방이 없으면 applied를 null로 두세요.
@@ -265,6 +284,7 @@ ${PROFESSOR.personality}
     "critiqueRevision": { "grade": "등급", "gpa": 점수, "feedback": "피드백" }
   },
   "overallGPA": 종합GPA(소수점1자리),
+  "predictionCritique": "제출한 예측의 반증가능성·위험감수·확률 정직성 심사 (2~3문장). 미제출이면 그 사실을 지적",
   "diagnosis": "가장 결정적인 약점 1개를 원문을 짚어 구체적으로 (2~3문장)",
   "instruction": "약점을 메우는 실제 수업 — 개념 설명 + 당신이 직접 쓴 올바른 예시 (5~8문장)",
   "assignment": "다음 과제 1개 + 반드시 포함할 요소 2~3가지",
@@ -388,7 +408,30 @@ ${lessonNote}${dedupNote}
 ⚠️ 아직 런칭 전이므로 자사 실적 수치를 지어내지 마세요. 외부 출처의 수치를 인용하고,
    자사 적용은 "가정"임을 명시하세요. 없는 데이터를 있는 것처럼 쓰면 최하점입니다.
 ⚠️ 반드시 결론과 적용 방안까지 포함한 완결된 형태로 작성하세요. 문장이 중간에 끊기면 불합격 처리됩니다.
-900자 이내 핵심만 간결하게.` }] }],
+900자 이내 핵심만 간결하게.
+
+═══════════════════════════════════
+🔮 그리고 리포트 맨 끝에 [예측]을 반드시 첨부하세요
+═══════════════════════════════════
+연구했다면 그 지식으로 미래를 맞힐 수 있어야 합니다. 아래 형식으로 1~2건을 붙이세요.
+
+[PREDICTIONS]
+[{"claim":"명제","probability":0.7,"horizon":"near","days":7,"criteria":"판정 방법","basis":"근거"}]
+[/PREDICTIONS]
+
+작성 규칙 (어기면 무효 처리되고 감점):
+1. claim은 **참/거짓이 명확히 갈리는 명제**여야 합니다.
+   ❌ "브랜드 인지도가 개선될 것이다" (측정 불가)
+   ✅ "2026년 8월 첫째 주 기준 네이버 '필름카메라 대여' 검색량이 전월 대비 증가한다"
+2. criteria에는 **누가 봐도 같은 결론이 나오는 확인 방법**을 쓰세요.
+3. probability는 0.05~0.95 사이. **정직하게 쓰세요.**
+   확신 없는데 0.9를 쓰면 틀렸을 때 점수가 크게 깎이고,
+   아는 걸 0.5로 쓰면 맞혀도 점수를 못 얻습니다. 진짜 믿는 확률이 최선의 전략입니다.
+4. horizon 선택:
+   - "near"  : ${role.title}의 전문 영역에서 3~30일 내 **외부 세계**(뉴스·검색·공개 지표·경쟁사)로
+               검증 가능한 것. days 필드에 일수를 쓰세요. → 곧 채점됩니다.
+   - "launch": 아날로그 홀리데이 **런칭 후 자사 데이터**로 검증할 것. → 런칭 시 채점됩니다.
+5. 최소 1건은 반드시 "near"로 내세요. 검증 못 할 예측만 내는 것은 회피입니다.` }] }],
       config: {
         temperature: 0.4,
         tools: [{ googleSearch: {} }],
@@ -396,9 +439,12 @@ ${lessonNote}${dedupNote}
     });
   }, 3, 5000);
 
-  const rawReport = result.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  console.log(`[Self-Study] 📚 ${role.name} 연구 완료 (${rawReport.length}자)`);
-  return rawReport;
+  const raw = result.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  // 🔮 예측 블록 분리 — 본문은 교수 평가용, 예측은 현실 채점용으로 각각 흘려보냅니다
+  const { predictions, cleanedReport } = extractPredictions(raw);
+  console.log(`[Self-Study] 📚 ${role.name} 연구 완료 (${cleanedReport.length}자, 예측 ${predictions.length}건)`);
+  return { rawReport: cleanedReport, predictions };
 }
 
 /**
@@ -408,9 +454,30 @@ ${lessonNote}${dedupNote}
  * v2: rawReport 원본 → 교수 직접 평가 (실제 연구 내용 평가)
  * Progressive Loading L0: GPA Frontmatter만 로드 (~100토큰)
  */
-async function evaluate(agentId, rawReport, topic) {
+async function evaluate(agentId, rawReport, topic, predictions = []) {
   const role = AGENT_ROLES[agentId];
   const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
+
+  // 🔮 예측 관련 입력 — 교수는 '품질'만 채점하고, '정확도'는 현실이 이미 매긴 점수를 참고합니다
+  const [predStats, recentResolved] = await Promise.all([
+    getPredictionStats(agentId).catch(() => null),
+    getRecentResolved(agentId, 4).catch(() => []),
+  ]);
+
+  const submittedBlock = predictions.length > 0
+    ? `\n## 이번 회차에 학생이 제출한 예측\n${predictions.map((p, i) =>
+        `${i + 1}. [${p.horizon}] "${p.claim}" — 확률 ${p.probability}\n   판정방법: ${p.criteria || '(미기재)'}`
+      ).join('\n')}\n`
+    : '\n## 이번 회차 제출 예측: 없음 (⚠️ 예측 미제출은 회피로 간주하여 감점 대상)\n';
+
+  const trackRecordBlock = predStats?.resolved > 0
+    ? `\n## 이 학생의 누적 예측 성적 (현실이 매긴 점수 — 당신이 바꿀 수 없음)
+판정 완료 ${predStats.resolved}건 | 평균 브라이어 ${predStats.avgBrier} | 스킬스코어 ${predStats.skillScore} | 적중률 ${predStats.hitRate}
+캘리브레이션 오차 ${predStats.calibrationError} (0에 가까울수록 확률을 정직하게 매김)
+${recentResolved.length > 0 ? `최근 판정:\n${recentResolved.map(r =>
+  `- "${String(r.claim).slice(0, 60)}" 확률 ${r.probability} → ${r.outcome ? '적중' : '빗나감'} (브라이어 ${r.brier})`).join('\n')}` : ''}
+※ 스킬스코어가 0 미만이면 동전던지기보다 못한 것입니다. 그 경우 '실증 수행' 도메인을 강등하세요.\n`
+    : '\n## 누적 예측 성적: 아직 판정된 예측이 없습니다 (평가에 반영하지 마세요)\n';
 
   // ⚖️ 과거 GPA 수치는 교수 입력에서 제외합니다.
   // LLM 채점자는 제시된 이전 점수에 앵커링되어 답안 품질과 무관하게 유사 점수를 반복 산출합니다.
@@ -437,7 +504,7 @@ async function evaluate(agentId, rawReport, topic) {
 
 ## 학습 주제: ${topic.topic}
 ## 학습 사유: ${topic.reason}
-${priorBlock}
+${priorBlock}${submittedBlock}${trackRecordBlock}
 ## 채점 유의사항
 아날로그 홀리데이는 아직 런칭 전이라 자사 실적 데이터가 존재하지 않습니다.
 따라서 '실증 수행'은 자사 수치를 지어냈는지가 아니라,
@@ -542,11 +609,11 @@ export async function runAutonomousStudy(agentId) {
     // ── Step 1: 주제 선정 (DB 쿼리, LLM 0회) ──
     const topic = await topicSelect(agentId);
 
-    // ── Step 2: 연구 (LLM 1회, Google Search) ──
-    const rawReport = await research(agentId, topic);
+    // ── Step 2: 연구 (LLM 1회, Google Search) + 예측 제출 ──
+    const { rawReport, predictions } = await research(agentId, topic);
 
-    // ── Step 3: 평가 (LLM 1회, rawReport 직접 전달) ──
-    const evaluation = await evaluate(agentId, rawReport, topic);
+    // ── Step 3: 평가 (LLM 1회) — 교수는 예측의 '품질'을 심사 ──
+    const evaluation = await evaluate(agentId, rawReport, topic, predictions);
 
     // ── 채점 실패 시: 아무것도 기록하지 않고 종료 ──
     // 지난 회차의 정상 처방이 아카이브에 그대로 남으므로, 다음 회차가 같은 과제를 재수행합니다
@@ -580,6 +647,12 @@ export async function runAutonomousStudy(agentId) {
     // 저장 3: GPA 아카이브 (Frontmatter 역할 — 다음 topicSelect에서 처방 전체를 물려받음)
     await saveStudyArchive(agentId, topic.topic, rawReport.substring(0, 300), evaluation);
 
+    // 저장 4: 🔮 예측 장부 — 현실이 채점할 때까지 보관
+    const predictionIds = await savePredictions(agentId, topic.topic, predictions).catch(() => []);
+    if (predictionIds.length > 0) {
+      console.log(`[Self-Study] 🔮 ${role.name}: 예측 ${predictionIds.length}건 등록`);
+    }
+
     // 크로스 에이전트 공유
     try {
       await shareStudyInsight(agentId, topic.topic, rawReport.substring(0, 200));
@@ -598,6 +671,8 @@ export async function runAutonomousStudy(agentId) {
         title: knowledge.title,
         savedId,
       }],
+      predictions,
+      predictionStats: await getPredictionStats(agentId).catch(() => null),
       evaluations: [{ topic: topic.topic, essay: rawReport.substring(0, 300), evaluation }],
     };
   } catch (err) {
@@ -610,7 +685,7 @@ export async function runAutonomousStudy(agentId) {
 // 디스코드 평가 브리핑 전송
 // ═══════════════════════════════════════════════════
 
-async function sendEvalToDiscord(results) {
+async function sendEvalToDiscord(results, resolution = null) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_STUDY;
   if (!webhookUrl) {
     console.log('[Self-Study] DISCORD_WEBHOOK_STUDY 미설정, 디스코드 브리핑 스킵');
@@ -705,6 +780,39 @@ async function sendEvalToDiscord(results) {
           });
         }
 
+        // 🔮 이번 회차 제출 예측
+        if (r.predictions?.length > 0) {
+          fields.push({
+            name: '🔮 오늘 건 예측',
+            value: r.predictions.map(p =>
+              `\`${Math.round(p.probability * 100)}%\` ${p.horizon === 'near' ? '⏱️' : '🚀'} ${p.claim}`
+            ).join('\n').substring(0, 1020),
+            inline: false,
+          });
+        }
+
+        // 📊 누적 예측 성적 (현실이 매긴 점수)
+        const ps = r.predictionStats;
+        if (ps?.resolved > 0) {
+          const verdict = ps.skillScore > 0.2 ? '🟢 우수' : ps.skillScore > 0 ? '🟡 보통' : '🔴 동전던지기 이하';
+          fields.push({
+            name: '📊 예측 실력 (현실 채점)',
+            value: `판정 ${ps.resolved}건 · 적중률 ${Math.round(ps.hitRate * 100)}%\n`
+              + `브라이어 **${ps.avgBrier}** (낮을수록 우수) · 스킬 **${ps.skillScore}** ${verdict}\n`
+              + `캘리브레이션 오차 ${ps.calibrationError} (확률 정직도)`,
+            inline: false,
+          });
+        }
+
+        // 🔮 예측 품질 심사
+        if (ev.evaluation?.predictionCritique) {
+          fields.push({
+            name: '🔍 예측 품질 심사',
+            value: ev.evaluation.predictionCritique.substring(0, 1020),
+            inline: false,
+          });
+        }
+
         // 다음 과제
         const nextAssignment = ev.evaluation?.assignment || ev.evaluation?.recommendation;
         if (nextAssignment) {
@@ -764,6 +872,23 @@ async function sendEvalToDiscord(results) {
   };
 
   embeds.unshift(summaryEmbed);
+
+  // ── 🔮 예측 판정 결과 Embed (요약 바로 다음) ──
+  if (resolution?.details?.length > 0) {
+    const lines = resolution.details.map(d => {
+      const icon = d.verdict === 'TRUE' ? '✅' : d.verdict === 'FALSE' ? '❌' : '⚪';
+      const who = AGENT_ROLES[d.agentId]?.name || d.agentId;
+      const score = d.brier != null ? ` · 브라이어 ${d.brier}` : ' · 무효';
+      return `${icon} **${who}** \`${Math.round(d.probability * 100)}%\` ${String(d.claim).slice(0, 70)}${score}`;
+    }).join('\n');
+
+    embeds.splice(1, 0, {
+      title: '⚖️ 지난 예측, 현실의 채점 결과',
+      description: `만기 ${resolution.checked}건 중 확정 ${resolution.resolved}건 · 무효 ${resolution.voided}건\n\n${lines}`.substring(0, 4000),
+      color: 0x0EA5E9,
+      footer: { text: '브라이어 스코어: 0=완벽, 0.25=동전던지기, 1=최악 · 판정은 검색 근거 기반' },
+    });
+  }
 
   // ── Discord 전송 (Embed 10개 제한 → 분할 전송) ──
   const DISCORD_EMBED_LIMIT = 10;
@@ -834,13 +959,106 @@ async function shareStudyInsight(fromAgentId, topic, content) {
   }
 }
 
+// ═══════════════════════════════════════════════════
+// 🔮 예측 자동 판정 — 현실이 채점하는 단계
+// ═══════════════════════════════════════════════════
+
+/**
+ * 만기된 near 예측을 검색 근거로 판정합니다.
+ *
+ * 이 단계가 이 시스템의 유일한 '진짜 검증자'입니다.
+ * 예측 시점에는 아무도 답을 모르지만, 판정 시점에는 답이 세상에 존재합니다.
+ * 즉 판정자가 예측자보다 구조적으로 정보 우위를 가집니다 — 정답지 없이 만든 검증자 비대칭입니다.
+ */
+export async function resolveDuePredictions(limit = 8) {
+  if (!getGeminiKey()) return { checked: 0, resolved: 0, voided: 0, details: [] };
+  await ensurePredictionsTable();
+
+  const due = await getDuePredictions(limit);
+  if (due.length === 0) {
+    console.log('[Predictions] 만기 도래 예측 없음');
+    return { checked: 0, resolved: 0, voided: 0, details: [] };
+  }
+
+  console.log(`[Predictions] ⚖️ 만기 예측 ${due.length}건 판정 시작`);
+  const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
+  const details = [];
+  let resolved = 0, voided = 0;
+
+  for (const p of due) {
+    try {
+      const today = new Date().toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+      const madeAt = new Date(p.created_at).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+
+      const result = await retryCall(async () => ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: [{ role: 'user', parts: [{ text: `오늘은 ${today}입니다.
+${madeAt}에 아래 예측이 제출되었고, 이제 판정 시점이 되었습니다.
+검색으로 사실을 확인한 뒤 판정하세요.
+
+## 예측 명제
+${p.claim}
+
+## 판정 방법 (예측자가 명시한 기준)
+${p.resolution_criteria || '(미기재)'}
+
+## 판정 규칙
+- 명제가 실제로 참으로 확인되면 TRUE
+- 거짓으로 확인되면 FALSE
+- 명제가 모호해 참/거짓을 가릴 수 없거나, 확인할 근거를 찾지 못하면 UNRESOLVABLE
+- ⚠️ 추측하지 마세요. 근거를 찾지 못했으면 UNRESOLVABLE입니다.
+- ⚠️ 예측자에게 유리하게 해석하지 마세요. 명제를 문자 그대로 판정하세요.
+
+## 순수 JSON만 출력
+{"verdict":"TRUE|FALSE|UNRESOLVABLE","evidence":"판정 근거와 출처 2문장 이내"}` }] }],
+        config: { temperature: 0.1, tools: [{ googleSearch: {} }] },
+      }), 2, 4000);
+
+      const text = result.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      let parsed;
+      try { parsed = extractJson(text); } catch { parsed = { verdict: 'UNRESOLVABLE', evidence: '판정 응답 파싱 실패' }; }
+
+      const verdict = String(parsed.verdict || '').toUpperCase();
+      const outcome = verdict === 'TRUE' ? true : verdict === 'FALSE' ? false : null;
+      const r = await resolvePrediction(p.id, outcome, parsed.evidence || '');
+
+      if (outcome === null) { voided++; } else { resolved++; }
+      details.push({
+        agentId: p.agent_id,
+        claim: p.claim,
+        probability: p.probability,
+        verdict,
+        brier: r?.brier ?? null,
+        evidence: parsed.evidence || '',
+      });
+      console.log(`[Predictions] ${verdict} — "${String(p.claim).slice(0, 45)}" (p=${p.probability}${r?.brier != null ? `, 브라이어 ${r.brier}` : ''})`);
+
+      await new Promise(r2 => setTimeout(r2, 1500)); // rate limit 방지
+    } catch (err) {
+      console.warn(`[Predictions] 판정 오류 (${p.id}):`, err.message);
+    }
+  }
+
+  console.log(`[Predictions] ⚖️ 판정 완료 — 확정 ${resolved}건, 무효 ${voided}건`);
+  return { checked: due.length, resolved, voided, details };
+}
+
 /**
  * 전체 에이전트 자율 학습 세션 (크론용)
  */
 export async function runAllAutonomousStudy() {
   await ensureAllBrainTables();
+  await ensurePredictionsTable();
   const AGENTS = ['hani', 'geo', 'noah', 'lina', 'alex'];
   const results = [];
+
+  // ── Step 0: 지난 예측부터 채점 — 오늘 학습의 평가 입력이 됩니다 ──
+  let resolution = { checked: 0, resolved: 0, voided: 0, details: [] };
+  try {
+    resolution = await resolveDuePredictions(8);
+  } catch (err) {
+    console.error('[Predictions] 자동 판정 실패:', err.message);
+  }
 
   for (const agentId of AGENTS) {
     const result = await runAutonomousStudy(agentId);
@@ -854,13 +1072,13 @@ export async function runAllAutonomousStudy() {
 
   // 🏛️ 평가 브리핑 디스코드 전송
   try {
-    await sendEvalToDiscord(results);
+    await sendEvalToDiscord(results, resolution);
   } catch (err) {
     console.error('[Self-Study] 디스코드 브리핑 전송 실패:', err.message);
   }
 
-  console.log(`[Self-Study] 🎓 전체 완료: ${totalLearned}건 학습, 평가 브리핑 전송`);
-  return { session: new Date().toISOString(), totalLearned, results };
+  console.log(`[Self-Study] 🎓 전체 완료: ${totalLearned}건 학습, 예측 판정 ${resolution.resolved}건, 브리핑 전송`);
+  return { session: new Date().toISOString(), totalLearned, resolution, results };
 }
 
 export { AGENT_ROLES, PROFESSOR };

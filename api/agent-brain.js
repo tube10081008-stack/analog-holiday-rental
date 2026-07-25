@@ -9,6 +9,12 @@ import {
   saveSharedKnowledge,
   ensureAllBrainTables,
 } from "./_lib/agent-brain.js";
+import {
+  getPredictionStats,
+  getOpenPredictions,
+  resolvePrediction,
+  ensurePredictionsTable,
+} from "./_lib/predictions.js";
 import { getNextTopic, getCurriculumSummary } from "./_lib/curriculum.js";
 import { runAllAutonomousStudy, runAutonomousStudy } from "./_lib/autonomous-study.js";
 import { GoogleGenAI } from "@google/genai";
@@ -84,6 +90,7 @@ export default async function handler(req, res) {
   }
 
   await ensureAllBrainTables();
+  await ensurePredictionsTable();
 
   if (req.method === "GET") {
     return handleGet(req, res);
@@ -135,6 +142,17 @@ async function handleGet(req, res) {
       case "shared": {
         const shared = await getSharedKnowledge("all", 50);
         return res.status(200).json({ ok: true, shared });
+      }
+
+      case "predictions": {
+        // 🔮 예측 장부 조회 — 미판정 목록 + 실력 통계
+        const targets = agentId ? [agentId] : AGENTS;
+        const data = await Promise.all(targets.map(async (id) => ({
+          agentId: id,
+          stats: await getPredictionStats(id),
+          open: await getOpenPredictions(id, 20),
+        })));
+        return res.status(200).json({ ok: true, predictions: data });
       }
 
       default:
@@ -197,8 +215,18 @@ async function handlePost(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      case "resolvePrediction": {
+        // 🔮 수동 판정 — 런칭 후 자사 데이터로 확인하는 launch 예측용
+        // outcome: true(적중) | false(빗나감) | null(판정 불가 → 무효)
+        const { predictionId, outcome, note = '' } = req.body;
+        if (!predictionId) return res.status(400).json({ ok: false, message: "predictionId 필요" });
+        const result = await resolvePrediction(predictionId, outcome ?? null, note);
+        if (!result) return res.status(404).json({ ok: false, message: "예측을 찾을 수 없습니다." });
+        return res.status(200).json({ ok: true, result });
+      }
+
       default:
-        return res.status(400).json({ ok: false, message: "올바른 action 필요 (addMemory, updateMemory, deleteMemory, archiveMemory)" });
+        return res.status(400).json({ ok: false, message: "올바른 action 필요 (addMemory, updateMemory, deleteMemory, archiveMemory, resolvePrediction)" });
     }
   } catch (err) {
     console.error("[Brain API POST Error]:", err);
