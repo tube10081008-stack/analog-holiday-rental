@@ -29,6 +29,13 @@ import {
   resolvePrediction,
   ensurePredictionsTable,
 } from "./predictions.js";
+import {
+  pickReviewItems,
+  extractRecall,
+  applyReviewResults,
+  getRetentionStats,
+  ensureReviewColumns,
+} from "./retrieval.js";
 
 function getGeminiKey() { return process.env.GEMINI_API_KEY; }
 
@@ -241,6 +248,10 @@ ${PROFESSOR.personality}
 
 ### 4. 메타 인지적 연구 진화력 (Critique & Revision) 🌟
 자신의 연구 한계를 인지하고, 확증 편향에 빠지지 않으며, 과거 학습과의 연결 속에서 연구 방향을 동적으로 보정할 수 있는가?
+**이 도메인은 추상적 인상이 아니라 아래 두 가지 실제 증거로 채점하세요:**
+  (a) [인출 시험] 결과 — 과거 학습이 실제로 정착했는가 (기억나지 않는다면 연결할 지식 자체가 없는 것)
+  (b) [지난 회차 처방] 이행 여부 — 배운 것을 실제로 적용했는가
+증거가 없으면 높은 점수를 주지 마세요.
 
 ## 지도(Tutoring) 작성 지침 — 가장 중요한 부분
 
@@ -258,6 +269,11 @@ ${PROFESSOR.personality}
 ### assignment (과제)
 다음 학습 주제 1개. 단, 주제명만 던지지 말고 **반드시 포함해야 할 요소 2~3가지**를 함께 지정하세요.
 예: "○○ 분석 — 단, 반드시 (a) 표본 수를 명시하고 (b) 반대 가설을 1개 검토할 것"
+
+### recallResults (인출 시험 채점) 🧠
+[인출 시험 채점] 자료가 주어졌다면, 각 문항을 정답 원문과 대조해 correct(true/false)를 판정하고
+한 줄 코멘트를 다세요. 출제 대상이 없으면 빈 배열 []을 반환하세요.
+학생이 무엇을 기억하고 무엇을 잊었는지가 이후 복습 일정을 결정하므로, 냉정하고 일관되게 채점하세요.
 
 ### predictionCritique (예측 품질 심사) 🔮
 학생이 제출한 예측을 **정확도가 아니라 '품질'** 기준으로 심사하세요.
@@ -277,6 +293,7 @@ ${PROFESSOR.personality}
 ## 출력 형식 (순수 JSON만 반환, 다른 텍스트 금지)
 {
   "priorCheck": { "applied": true 또는 false 또는 null, "comment": "지난 처방 이행 여부 판정 1~2문장" },
+  "recallResults": [{ "index": 1, "correct": true 또는 false, "comment": "무엇을 기억하고 무엇을 놓쳤는지 1문장" }],
   "grades": {
     "goalAlignment": { "grade": "A~F(+/- 포함)", "gpa": 0.0~4.3, "feedback": "2문장 이내 구체적 피드백" },
     "planQuality": { "grade": "등급", "gpa": 점수, "feedback": "피드백" },
@@ -364,9 +381,30 @@ async function topicSelect(agentId) {
  * 이전 Step1(검색) + Step2(구조화) 통합 → rawReport 직접 반환
  * Progressive Loading L0: 과거 주제 Frontmatter만 로드 (중복 방지)
  */
-async function research(agentId, topic) {
+async function research(agentId, topic, reviewItems = []) {
   const role = AGENT_ROLES[agentId];
   const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
+
+  // 🧠 인출 시험 — 과거 학습을 '원문 없이' 복원하게 합니다.
+  // ⚠️ answerKey(정답 원문)는 절대 이 프롬프트에 넣지 않습니다. 넣는 순간 인출이 아니라 베끼기가 됩니다.
+  const quizBlock = reviewItems.length > 0
+    ? `\n═══════════════════════════════════
+🧠 인출 시험 (Closed-Book) — 리포트 작성 전에 먼저 답하세요
+═══════════════════════════════════
+아래는 당신이 과거에 학습했던 주제입니다. **자료를 다시 찾아보지 말고**,
+기억나는 대로 핵심 내용을 복원하세요. 수치·프레임워크·적용 방안을 최대한 구체적으로.
+
+${reviewItems.map(it => `[${it.index}] ${it.title}${it.reviewCount > 0 ? ` (${it.reviewCount}회 복습됨)` : ''}`).join('\n')}
+
+리포트 맨 앞에 아래 형식으로 답안을 붙이세요:
+[RECALL]
+[{"index":1,"answer":"기억나는 핵심 내용"}]
+[/RECALL]
+
+⚠️ 기억나지 않으면 솔직히 "기억나지 않음"이라고 쓰세요. 지어내면 훨씬 큰 감점입니다.
+⚠️ 이 시험은 당신의 지식이 실제로 정착했는지 확인하는 것이며, 틀려도 다시 배울 기회를 줍니다.
+═══════════════════════════════════\n`
+    : '';
 
   // L0: 중복 체크 — 과거 학습 주제 Frontmatter만 로드
   const pastTopics = await getPastTopics(agentId, 10);
@@ -401,7 +439,7 @@ ${lesson.instruction}
 ## 연구 사유: ${topic.reason}
 ## 연구자: ${role.name} (${role.title})
 ## 적용 대상: 아날로그 홀리데이 (여행 카메라 렌탈 서비스 · 런칭 준비 단계)
-${lessonNote}${dedupNote}
+${quizBlock}${lessonNote}${dedupNote}
 
 위 주제에 대해 학술 논문/산업 보고서 기반으로 연구 리포트를 작성하세요.
 필수 포함: 출처(저자, 연도), 수치/공식, 아날로그 홀리데이 적용 방안.
@@ -441,10 +479,11 @@ ${lessonNote}${dedupNote}
 
   const raw = result.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-  // 🔮 예측 블록 분리 — 본문은 교수 평가용, 예측은 현실 채점용으로 각각 흘려보냅니다
-  const { predictions, cleanedReport } = extractPredictions(raw);
-  console.log(`[Self-Study] 📚 ${role.name} 연구 완료 (${cleanedReport.length}자, 예측 ${predictions.length}건)`);
-  return { rawReport: cleanedReport, predictions };
+  // 🧠 인출 답안 + 🔮 예측 블록을 본문에서 분리 — 각각 다른 채점 경로로 흘려보냅니다
+  const { recalls, cleanedReport: afterRecall } = extractRecall(raw);
+  const { predictions, cleanedReport } = extractPredictions(afterRecall);
+  console.log(`[Self-Study] 📚 ${role.name} 연구 완료 (${cleanedReport.length}자, 인출답안 ${recalls.length}건, 예측 ${predictions.length}건)`);
+  return { rawReport: cleanedReport, predictions, recalls };
 }
 
 /**
@@ -454,9 +493,25 @@ ${lessonNote}${dedupNote}
  * v2: rawReport 원본 → 교수 직접 평가 (실제 연구 내용 평가)
  * Progressive Loading L0: GPA Frontmatter만 로드 (~100토큰)
  */
-async function evaluate(agentId, rawReport, topic, predictions = []) {
+async function evaluate(agentId, rawReport, topic, predictions = [], reviewItems = [], recalls = []) {
   const role = AGENT_ROLES[agentId];
   const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
+
+  // 🧠 인출 시험 채점 자료 — 여기서만 정답 원문(answerKey)을 교수에게 공개합니다
+  const recallBlock = reviewItems.length > 0
+    ? `\n## [인출 시험 채점] — 학생은 원문 없이 기억만으로 답했습니다
+${reviewItems.map(it => {
+  const ans = recalls.find(r => r.index === it.index);
+  return `
+[${it.index}] 출제 주제: ${it.title}
+· 학생의 회상 답안: ${ans?.answer ? `"${ans.answer}"` : '(미제출)'}
+· 정답 원문: "${String(it.answerKey).slice(0, 400)}"`;
+}).join('\n')}
+
+채점 기준: 표현이 달라도 **핵심 내용(수치·프레임워크·결론)이 재현되었으면 정답**입니다.
+문장을 그대로 외웠는지가 아니라 지식이 남아 있는지를 보세요.
+미제출이거나 "기억나지 않음"이면 오답이되, 지어낸 것보다는 정직한 태도로 인정하세요.\n`
+    : '\n## 인출 시험: 이번 회차는 출제 대상이 없습니다 (복습 주기 미도래)\n';
 
   // 🔮 예측 관련 입력 — 교수는 '품질'만 채점하고, '정확도'는 현실이 이미 매긴 점수를 참고합니다
   const [predStats, recentResolved] = await Promise.all([
@@ -504,7 +559,7 @@ ${recentResolved.length > 0 ? `최근 판정:\n${recentResolved.map(r =>
 
 ## 학습 주제: ${topic.topic}
 ## 학습 사유: ${topic.reason}
-${priorBlock}${submittedBlock}${trackRecordBlock}
+${priorBlock}${recallBlock}${submittedBlock}${trackRecordBlock}
 ## 채점 유의사항
 아날로그 홀리데이는 아직 런칭 전이라 자사 실적 데이터가 존재하지 않습니다.
 따라서 '실증 수행'은 자사 수치를 지어냈는지가 아니라,
@@ -609,11 +664,17 @@ export async function runAutonomousStudy(agentId) {
     // ── Step 1: 주제 선정 (DB 쿼리, LLM 0회) ──
     const topic = await topicSelect(agentId);
 
-    // ── Step 2: 연구 (LLM 1회, Google Search) + 예측 제출 ──
-    const { rawReport, predictions } = await research(agentId, topic);
+    // ── Step 1.5: 인출 시험 출제 (DB 쿼리, LLM 0회) ──
+    const reviewItems = await pickReviewItems(agentId, 2).catch(() => []);
+    if (reviewItems.length > 0) {
+      console.log(`[Self-Study] 🧠 ${role.name} 인출 시험 ${reviewItems.length}문항 출제 (복습 주기 도래)`);
+    }
 
-    // ── Step 3: 평가 (LLM 1회) — 교수는 예측의 '품질'을 심사 ──
-    const evaluation = await evaluate(agentId, rawReport, topic, predictions);
+    // ── Step 2: 연구 (LLM 1회) — 인출 답안 + 예측 동시 제출 ──
+    const { rawReport, predictions, recalls } = await research(agentId, topic, reviewItems);
+
+    // ── Step 3: 평가 (LLM 1회) — 인출 채점 + 예측 품질 심사 ──
+    const evaluation = await evaluate(agentId, rawReport, topic, predictions, reviewItems, recalls);
 
     // ── 채점 실패 시: 아무것도 기록하지 않고 종료 ──
     // 지난 회차의 정상 처방이 아카이브에 그대로 남으므로, 다음 회차가 같은 과제를 재수행합니다
@@ -653,6 +714,14 @@ export async function runAutonomousStudy(agentId) {
       console.log(`[Self-Study] 🔮 ${role.name}: 예측 ${predictionIds.length}건 등록`);
     }
 
+    // 저장 5: 🧠 인출 결과로 복습 일정 갱신 (성공→간격 확대, 실패→내일 재시험)
+    const reviewOutcome = await applyReviewResults(agentId, reviewItems, evaluation.recallResults || [])
+      .catch(() => []);
+    if (reviewOutcome.length > 0) {
+      const passed = reviewOutcome.filter(r => r.correct).length;
+      console.log(`[Self-Study] 🧠 ${role.name}: 인출 ${passed}/${reviewOutcome.length} 통과 — ${reviewOutcome.map(r => `${r.correct ? '✓' : '✗'}${r.nextInDays}일후`).join(', ')}`);
+    }
+
     // 크로스 에이전트 공유
     try {
       await shareStudyInsight(agentId, topic.topic, rawReport.substring(0, 200));
@@ -673,6 +742,8 @@ export async function runAutonomousStudy(agentId) {
       }],
       predictions,
       predictionStats: await getPredictionStats(agentId).catch(() => null),
+      reviewOutcome,
+      retentionStats: await getRetentionStats(agentId).catch(() => null),
       evaluations: [{ topic: topic.topic, essay: rawReport.substring(0, 300), evaluation }],
     };
   } catch (err) {
@@ -776,6 +847,26 @@ async function sendEvalToDiscord(results, resolution = null) {
           fields.push({
             name: '💬 교수 소견',
             value: ev.evaluation.professorComment.substring(0, 1020),
+            inline: false,
+          });
+        }
+
+        // 🧠 인출 시험 결과 (기억 정착 추적)
+        if (r.reviewOutcome?.length > 0) {
+          fields.push({
+            name: '🧠 인출 시험 (과거 학습 회상)',
+            value: r.reviewOutcome.map(v =>
+              `${v.correct ? '✅' : '❌'} ${String(v.title).slice(0, 40)}\n   └ ${v.comment || ''} → ${v.nextInDays}일 후 재시험`
+            ).join('\n').substring(0, 1020),
+            inline: false,
+          });
+        }
+        const rs = r.retentionStats;
+        if (rs?.tested > 0) {
+          fields.push({
+            name: '📚 기억 정착도',
+            value: `학습 지식 ${rs.total}건 · 시험 완료 ${rs.tested}건 · **숙달 ${rs.mastered}건**`
+              + (rs.recallRate != null ? ` · 회상 성공률 ${Math.round(rs.recallRate * 100)}%` : ''),
             inline: false,
           });
         }
@@ -1049,6 +1140,7 @@ ${p.resolution_criteria || '(미기재)'}
 export async function runAllAutonomousStudy() {
   await ensureAllBrainTables();
   await ensurePredictionsTable();
+  await ensureReviewColumns();
   const AGENTS = ['hani', 'geo', 'noah', 'lina', 'alex'];
   const results = [];
 
