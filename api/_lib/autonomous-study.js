@@ -185,6 +185,27 @@ const AGENT_ROLES = {
   },
 };
 
+/**
+ * 🧭 직무 범위 가드 전용 어휘 (드리프트 감지용)
+ *
+ * 크로스 에이전트 공유에 쓰이는 AGENT_SKILL_MAP과 의도적으로 분리했습니다.
+ * 공유 게이트는 좁아야 오탐이 없지만, 범위 가드는 넓어야 정상 주제("베이지안 추론" 등)를
+ * 이탈로 오판하지 않습니다. 여기 없는 단어가 나오면 역할 앵커가 붙을 뿐이므로
+ * 오탐의 대가는 작지만, 누락(드리프트 미감지)의 대가는 큽니다 → 넉넉하게 잡습니다.
+ */
+const AGENT_SCOPE_TERMS = {
+  hani: ['마케팅', '브랜드', '콘텐츠', 'SNS', '트렌드', '고객', '캠페인', '카피', '스토리',
+         '퍼널', '전환', '소비자', '광고', '매거진', '에디토리얼', '포지셔닝', '인지도', '바이럴'],
+  geo: ['물류', '배송', '재고', '반납', '입출고', '공급망', '스케줄', '창고', '운송', '리드타임',
+        '수요 예측', '최적화', '회전율', '파손', '검수', '패키징', '라스트마일', '역물류', 'SCM'],
+  noah: ['데이터', '분석', '통계', '머신러닝', 'NLP', '예측', 'A/B', '베이지안', '추론', '회귀',
+         '코호트', '세그먼', 'LTV', '리텐션', '지표', '실험', '인과', '모델', '감성', '시계열'],
+  lina: ['고객', '예약', '응대', '서비스', '만족도', '노쇼', 'CS', '문의', '환불', '클레임',
+         '넛지', '행동경제', '여정', '접점', '커뮤니케이션', '신뢰', '경험', '불만', '상담'],
+  alex: ['영상', '디자인', '촬영', '편집', '브랜드', '크리에이티브', '시각', '컬러', '숏폼',
+         '릴스', '모션', '사운드', '그레이딩', '구도', '썸네일', '시청', '연출', '비주얼'],
+};
+
 // ═══════════════════════════════════════════════════
 // 🏛️ 명예교수 페르소나 & GPA 평가 시스템
 // ═══════════════════════════════════════════════════
@@ -327,14 +348,69 @@ async function topicSelect(agentId) {
   // L0: Frontmatter 로딩 — 교수의 마지막 '처방 전체'(진단·수업·과제) 조회
   const lastEval = await getLastPrescription(agentId);
 
+  // ═══ 탐험 주기 (Exploration) ═══
+  // 기존에는 규칙1(교수 과제)이 항상 발동해 규칙2·3이 도달 불가능한 죽은 코드였습니다.
+  // 주제가 topic_{n+1} = assignment_n 체인으로만 전개되면 좁은 영역으로 수렴하거나
+  // 직무에서 이탈하는 드리프트가 발생합니다(순수 탐욕 정책의 한계).
+  // → N회차마다 한 번은 '가장 약한 GPA 도메인'으로 강제 전환해 탐험을 배분합니다.
+  const EXPLORE_EVERY = Number(process.env.STUDY_EXPLORE_EVERY) || 4;
+  let studyCount = 0;
+  try {
+    const pool = getPool();
+    if (pool) {
+      const c = await pool.query(`SELECT COUNT(*)::int AS n FROM study_archives WHERE agent_id = $1`, [agentId]);
+      studyCount = c.rows[0]?.n || 0;
+    }
+  } catch { /* 카운트 실패 시 탐험 없이 진행 */ }
+
+  const isExploreTurn = studyCount > 0 && studyCount % EXPLORE_EVERY === 0;
+  if (isExploreTurn) {
+    const weakDomain = await getWeakestDomain(agentId);
+    if (weakDomain) {
+      const domainTopics = {
+        goal_alignment: `${role.researchDirection.split(',')[0].trim()} 최신 연구 동향 점검`,
+        plan_quality: `${role.coreSkills[0]} 방법론 설계 프레임워크 재정비`,
+        action_execution: `아날로그 홀리데이 ${role.kpis[0]} 개선을 위한 실행 설계`,
+        critique_revision: `${role.title} 역할의 최근 판단 오류 회고와 보정`,
+      };
+      const topic = domainTopics[weakDomain];
+      console.log(`[Self-Study] 🎲 탐험 회차(${studyCount}회 학습 후) — 약점 도메인 "${weakDomain}" 보강: "${topic}"`);
+      return {
+        topic,
+        reason: `${studyCount}회차 탐험 — ${weakDomain} 도메인 GPA 최저로 보강 학습`,
+        search_query: topic,
+        source: 'weak_domain_explore',
+        // 탐험 회차에도 지난 수업은 계승합니다 (배운 것을 잊지 않도록)
+        priorLesson: lastEval?.instruction ? {
+          topic: lastEval.topic,
+          diagnosis: lastEval.diagnosis || '',
+          instruction: lastEval.instruction || '',
+          assignment: lastEval.assignment || '',
+        } : undefined,
+      };
+    }
+  }
+
   // 규칙 1: 교수의 과제가 있으면 무조건 따른다 + 지난 수업을 함께 물려받는다
   if (lastEval?.assignment && lastEval.assignment.trim().length > 2) {
-    console.log(`[Self-Study] 🎯 교수 지시 과제: "${lastEval.assignment.substring(0, 60)}" (이전: ${lastEval.topic}, GPA ${lastEval.overall_gpa})`);
+    // 🧭 직무 범위 가드 — 주제 체인이 전문 영역에서 이탈하는 드리프트를 감지합니다.
+    // 크로스 공유용 AGENT_SKILL_MAP과 분리된 넓은 어휘를 씁니다.
+    // (공유 게이트는 좁아야 오탐이 없지만, 범위 가드는 넓어야 정상 주제를 이탈로 오판하지 않습니다)
+    const scopeWords = AGENT_SCOPE_TERMS[agentId] || [];
+    const inScope = scopeWords.some(k => lastEval.assignment.includes(k));
+    const anchored = inScope
+      ? lastEval.assignment
+      : `${lastEval.assignment} — 단, 반드시 ${role.title}의 관점에서 아날로그 홀리데이의 ${role.kpis[0]} 개선과 연결하여 다룰 것`;
+
+    if (!inScope) {
+      console.warn(`[Self-Study] 🧭 직무 범위 이탈 감지 — 역할 앵커 부착 (${role.title})`);
+    }
+    console.log(`[Self-Study] 🎯 교수 지시 과제: "${anchored.substring(0, 60)}" (이전: ${lastEval.topic}, GPA ${lastEval.overall_gpa})`);
     return {
-      topic: lastEval.assignment,
-      reason: `이전 학습(${lastEval.topic}) GPA ${lastEval.overall_gpa} → 교수 지시`,
-      search_query: lastEval.assignment,
-      source: 'professor_directive',
+      topic: anchored,
+      reason: `이전 학습(${lastEval.topic}) GPA ${lastEval.overall_gpa} → 교수 지시${inScope ? '' : ' (직무 앵커 부착)'}`,
+      search_query: anchored,
+      source: inScope ? 'professor_directive' : 'professor_directive_anchored',
       // 🎓 지난 수업 — research 단계에서 학생에게 전달되고, evaluate 단계에서 이행 검증됨
       priorLesson: {
         topic: lastEval.topic,
@@ -479,11 +555,20 @@ ${quizBlock}${lessonNote}${dedupNote}
 
   const raw = result.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
+  // 📎 그라운딩 메타데이터 — 모델이 '실제로 검색한' 출처 목록입니다.
+  // 리포트가 인용한 출처가 이 목록에 없으면 날조 가능성이 있으므로 교수에게 대조 자료로 넘깁니다.
+  // (LLM 호출 추가 없이 인용 검증을 가능하게 하는 경로)
+  const chunks = result?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+  const sources = chunks
+    .map(c => c?.web?.title || c?.web?.uri)
+    .filter(Boolean)
+    .slice(0, 10);
+
   // 🧠 인출 답안 + 🔮 예측 블록을 본문에서 분리 — 각각 다른 채점 경로로 흘려보냅니다
   const { recalls, cleanedReport: afterRecall } = extractRecall(raw);
   const { predictions, cleanedReport } = extractPredictions(afterRecall);
-  console.log(`[Self-Study] 📚 ${role.name} 연구 완료 (${cleanedReport.length}자, 인출답안 ${recalls.length}건, 예측 ${predictions.length}건)`);
-  return { rawReport: cleanedReport, predictions, recalls };
+  console.log(`[Self-Study] 📚 ${role.name} 연구 완료 (${cleanedReport.length}자, 인출답안 ${recalls.length}건, 예측 ${predictions.length}건, 검색출처 ${sources.length}건)`);
+  return { rawReport: cleanedReport, predictions, recalls, sources };
 }
 
 /**
@@ -493,7 +578,7 @@ ${quizBlock}${lessonNote}${dedupNote}
  * v2: rawReport 원본 → 교수 직접 평가 (실제 연구 내용 평가)
  * Progressive Loading L0: GPA Frontmatter만 로드 (~100토큰)
  */
-async function evaluate(agentId, rawReport, topic, predictions = [], reviewItems = [], recalls = []) {
+async function evaluate(agentId, rawReport, topic, predictions = [], reviewItems = [], recalls = [], sources = []) {
   const role = AGENT_ROLES[agentId];
   const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
 
@@ -560,6 +645,14 @@ ${recentResolved.length > 0 ? `최근 판정:\n${recentResolved.map(r =>
 ## 학습 주제: ${topic.topic}
 ## 학습 사유: ${topic.reason}
 ${priorBlock}${recallBlock}${submittedBlock}${trackRecordBlock}
+## [인용 검증] 학생이 이번 연구에서 실제로 검색한 출처 (시스템 기록)
+${sources.length > 0
+  ? sources.map(s => `- ${s}`).join('\n') + `
+⚠️ 리포트가 인용한 저자·논문·보고서가 위 목록에서 확인되지 않는다면 **날조 가능성**이 있습니다.
+   확인되지 않은 인용을 근거로 삼은 주장은 '목표 정렬'과 '실증 수행' 도메인에서 감점하세요.
+   출처 없이 단정한 수치는 특히 엄격하게 보세요.`
+  : '- (검색 기록 없음) → 이 리포트는 외부 근거 없이 작성되었습니다. 인용이 등장한다면 날조를 의심하고 강하게 감점하세요.'}
+
 ## 채점 유의사항
 아날로그 홀리데이는 아직 런칭 전이라 자사 실적 데이터가 존재하지 않습니다.
 따라서 '실증 수행'은 자사 수치를 지어냈는지가 아니라,
@@ -671,10 +764,10 @@ export async function runAutonomousStudy(agentId) {
     }
 
     // ── Step 2: 연구 (LLM 1회) — 인출 답안 + 예측 동시 제출 ──
-    const { rawReport, predictions, recalls } = await research(agentId, topic, reviewItems);
+    const { rawReport, predictions, recalls, sources } = await research(agentId, topic, reviewItems);
 
-    // ── Step 3: 평가 (LLM 1회) — 인출 채점 + 예측 품질 심사 ──
-    const evaluation = await evaluate(agentId, rawReport, topic, predictions, reviewItems, recalls);
+    // ── Step 3: 평가 (LLM 1회) — 인출 채점 + 예측 품질 심사 + 인용 대조 ──
+    const evaluation = await evaluate(agentId, rawReport, topic, predictions, reviewItems, recalls, sources);
 
     // ── 채점 실패 시: 아무것도 기록하지 않고 종료 ──
     // 지난 회차의 정상 처방이 아카이브에 그대로 남으므로, 다음 회차가 같은 과제를 재수행합니다
@@ -701,7 +794,8 @@ export async function runAutonomousStudy(agentId) {
       memory_type: 'lesson',
       title: `[수업] ${topic.topic.substring(0, 30)}`,
       content: `[진단] ${evaluation.diagnosis || '-'}\n[${PROFESSOR.name} 교수의 가르침] ${evaluation.instruction || '-'}`,
-      importance: 8,
+      // 중요도 6: 인출 시험 대상으로는 충분하되, 대화 컨텍스트를 과점하지 않는 수준
+      importance: 6,
       tags: ['self_study', 'tutoring', agentId],
     });
 
@@ -756,7 +850,7 @@ export async function runAutonomousStudy(agentId) {
 // 디스코드 평가 브리핑 전송
 // ═══════════════════════════════════════════════════
 
-async function sendEvalToDiscord(results, resolution = null) {
+async function sendEvalToDiscord(results, resolution = null, skipped = []) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_STUDY;
   if (!webhookUrl) {
     console.log('[Self-Study] DISCORD_WEBHOOK_STUDY 미설정, 디스코드 브리핑 스킵');
@@ -958,7 +1052,10 @@ async function sendEvalToDiscord(results, resolution = null) {
       evalCount > 0
         ? `📈 **오늘의 전체 평균 GPA: ${Math.round((totalGPA / evalCount) * 10) / 10} / 4.3**\n🎓 평가 완료: **${evalCount}건** ${failCount > 0 ? `| ⚠️ 실패: **${failCount}건**` : ''}`
         : `⚠️ 오늘은 평가가 완료된 에이전트가 없습니다. ${failCount > 0 ? `(${failCount}건 실패)` : ''}`,
-    ].join('\n'),
+      skipped.length > 0
+        ? `\n⏱️ 시간 예산 초과로 **${skipped.map(id => AGENT_ROLES[id]?.name || id).join(', ')}** 은(는) 다음 회차로 이월되었습니다.`
+        : '',
+    ].filter(Boolean).join('\n'),
     color: evalCount > 0 ? 0x10B981 : 0xEF4444,
   };
 
@@ -1061,22 +1158,30 @@ async function shareStudyInsight(fromAgentId, topic, content) {
  * 예측 시점에는 아무도 답을 모르지만, 판정 시점에는 답이 세상에 존재합니다.
  * 즉 판정자가 예측자보다 구조적으로 정보 우위를 가집니다 — 정답지 없이 만든 검증자 비대칭입니다.
  */
-export async function resolveDuePredictions(limit = 8) {
-  if (!getGeminiKey()) return { checked: 0, resolved: 0, voided: 0, details: [] };
+export async function resolveDuePredictions(limit = 4, budgetMs = 70000) {
+  if (!getGeminiKey()) return { checked: 0, resolved: 0, voided: 0, deferred: 0, details: [] };
   await ensurePredictionsTable();
 
+  const t0 = Date.now();
   const due = await getDuePredictions(limit);
   if (due.length === 0) {
     console.log('[Predictions] 만기 도래 예측 없음');
-    return { checked: 0, resolved: 0, voided: 0, details: [] };
+    return { checked: 0, resolved: 0, voided: 0, deferred: 0, details: [] };
   }
 
   console.log(`[Predictions] ⚖️ 만기 예측 ${due.length}건 판정 시작`);
   const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
   const details = [];
-  let resolved = 0, voided = 0;
+  let resolved = 0, voided = 0, deferred = 0;
 
   for (const p of due) {
+    // ⏱️ 판정이 학습 시간을 잡아먹지 않도록 자체 예산을 둡니다.
+    // 미판정 건은 status가 'open'으로 남아 다음 회차에 다시 대상이 되므로 유실되지 않습니다.
+    if (Date.now() - t0 > budgetMs) {
+      deferred = due.length - (resolved + voided);
+      console.log(`[Predictions] ⏱️ 판정 예산 초과 — ${deferred}건은 다음 회차로 이월`);
+      break;
+    }
     try {
       const today = new Date().toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
       const madeAt = new Date(p.created_at).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
@@ -1124,14 +1229,14 @@ ${p.resolution_criteria || '(미기재)'}
       });
       console.log(`[Predictions] ${verdict} — "${String(p.claim).slice(0, 45)}" (p=${p.probability}${r?.brier != null ? `, 브라이어 ${r.brier}` : ''})`);
 
-      await new Promise(r2 => setTimeout(r2, 1500)); // rate limit 방지
+      await new Promise(r2 => setTimeout(r2, 800)); // rate limit 방지
     } catch (err) {
       console.warn(`[Predictions] 판정 오류 (${p.id}):`, err.message);
     }
   }
 
-  console.log(`[Predictions] ⚖️ 판정 완료 — 확정 ${resolved}건, 무효 ${voided}건`);
-  return { checked: due.length, resolved, voided, details };
+  console.log(`[Predictions] ⚖️ 판정 완료 — 확정 ${resolved}건, 무효 ${voided}건${deferred ? `, 이월 ${deferred}건` : ''}`);
+  return { checked: due.length, resolved, voided, deferred, details };
 }
 
 /**
@@ -1144,18 +1249,31 @@ export async function runAllAutonomousStudy() {
   const AGENTS = ['hani', 'geo', 'noah', 'lina', 'alex'];
   const results = [];
 
+  // ⏱️ 전체 시간 예산 — 서버리스 타임아웃으로 브리핑 자체가 유실되는 것을 막습니다.
+  // 예산을 넘기면 남은 에이전트를 건너뛰고, 여기까지의 결과로 브리핑을 반드시 전송합니다.
+  // (각 에이전트의 학습 결과는 개별적으로 DB에 커밋되므로 유실되지 않습니다)
+  const BUDGET_MS = Number(process.env.STUDY_BUDGET_MS) || 230000;
+  const startedAt = Date.now();
+  const elapsed = () => Date.now() - startedAt;
+  const skipped = [];
+
   // ── Step 0: 지난 예측부터 채점 — 오늘 학습의 평가 입력이 됩니다 ──
-  let resolution = { checked: 0, resolved: 0, voided: 0, details: [] };
+  let resolution = { checked: 0, resolved: 0, voided: 0, deferred: 0, details: [] };
   try {
-    resolution = await resolveDuePredictions(8);
+    resolution = await resolveDuePredictions(4, 70000);
   } catch (err) {
     console.error('[Predictions] 자동 판정 실패:', err.message);
   }
 
   for (const agentId of AGENTS) {
+    if (elapsed() > BUDGET_MS) {
+      skipped.push(agentId);
+      console.warn(`[Self-Study] ⏱️ 시간 예산 초과 — ${AGENT_ROLES[agentId]?.name || agentId} 학습을 다음 회차로 이월`);
+      continue;
+    }
     const result = await runAutonomousStudy(agentId);
     results.push(result);
-    await new Promise(r => setTimeout(r, 3000)); // 에이전트 간 3초 쿨다운
+    await new Promise(r => setTimeout(r, 2000)); // 에이전트 간 쿨다운
   }
 
   const totalLearned = results.reduce((s, r) => 
@@ -1164,13 +1282,13 @@ export async function runAllAutonomousStudy() {
 
   // 🏛️ 평가 브리핑 디스코드 전송
   try {
-    await sendEvalToDiscord(results, resolution);
+    await sendEvalToDiscord(results, resolution, skipped);
   } catch (err) {
     console.error('[Self-Study] 디스코드 브리핑 전송 실패:', err.message);
   }
 
-  console.log(`[Self-Study] 🎓 전체 완료: ${totalLearned}건 학습, 예측 판정 ${resolution.resolved}건, 브리핑 전송`);
-  return { session: new Date().toISOString(), totalLearned, resolution, results };
+  console.log(`[Self-Study] 🎓 완료: ${totalLearned}건 학습, 예측 판정 ${resolution.resolved}건, 소요 ${Math.round(elapsed() / 1000)}초${skipped.length ? `, 이월 ${skipped.length}명` : ''}`);
+  return { session: new Date().toISOString(), totalLearned, resolution, skipped, elapsedMs: elapsed(), results };
 }
 
 export { AGENT_ROLES, PROFESSOR };

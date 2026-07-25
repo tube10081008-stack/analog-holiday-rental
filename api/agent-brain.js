@@ -15,7 +15,7 @@ import {
   resolvePrediction,
   ensurePredictionsTable,
 } from "./_lib/predictions.js";
-import { getNextTopic, getCurriculumSummary } from "./_lib/curriculum.js";
+import { getNextTopic, getCurriculumSummary, getRoundDirective } from "./_lib/curriculum.js";
 import { runAllAutonomousStudy, runAutonomousStudy } from "./_lib/autonomous-study.js";
 import { GoogleGenAI } from "@google/genai";
 import pg from "pg";
@@ -278,7 +278,7 @@ async function getYaleStudyCount(agentId) {
   const p = getPool();
   if (!p) return 0;
   try {
-    const res = await p.query(`SELECT COUNT(*) as cnt FROM agent_memories WHERE agent_id = $1 AND title LIKE '%[Yale]%'`, [agentId]);
+    const res = await p.query(`SELECT COUNT(*) as cnt FROM agent_memories WHERE agent_id = $1 AND title LIKE '%[Yale%'`, [agentId]);
     return parseInt(res.rows[0].cnt) || 0;
   } catch { return 0; }
 }
@@ -298,11 +298,17 @@ async function generateStudyKnowledge(agentId, topic, existingTitles) {
   const ai = new GoogleGenAI({ apiKey: key });
   const curriculum = getCurriculumSummary(agentId);
 
+  const round = getRoundDirective(topic.round || 1);
+
   const prompt = `당신은 ${topic.school}의 ${topic.semester} 담당 교수입니다.
 학생 '${topic.agentName}'은 '아날로그 홀리데이'라는 여행 장비 렌탈 서비스 회사의 AI 에이전트입니다.
 
 ## 수업 주제: ${topic.title}
 적용: ${topic.focus} / 학위: ${curriculum.degree}
+
+## 이번 수업의 단계: ${round.label}
+${round.directive}
+이 학생은 이 주제를 ${topic.round || 1}번째로 다루고 있습니다. 단계에 맞는 깊이로 가르치세요.
 
 ## 기존 지식 (중복 금지)
 ${existingTitles.slice(-15).map(t => `- ${t}`).join('\n')}
@@ -321,7 +327,7 @@ ${existingTitles.slice(-15).map(t => `- ${t}`).join('\n')}
 
   return {
     memory_type: 'fact',
-    title: `[Yale] ${parsed.title}`,
+    title: `[Yale${(topic.round || 1) > 1 ? ' R' + topic.round : ''}] ${parsed.title}`,
     content: parsed.content,
     importance: Math.min(Math.max(parsed.importance || 7, 6), 9),
     tags: ['yale_school', agentId]

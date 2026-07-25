@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "api/agent-brain.js": { "maxDuration": 300 },
+    "api/cron/weekly-reflection.js": { "maxDuration": 300 },
+    "api/cron/daily-report.js": { "maxDuration": 120 },
+    "api/cron/evening-report.js": { "maxDuration": 120 }
+  },
   "crons": [
     {
       "path": "/api/cron/daily-report",
@@ -13,10 +19,12 @@
       "schedule": "0 0 * * 1"
     },
     {
+      "_comment_study": "UTC 기준. 0 9 = 18:00 KST (예일 커리큘럼 학습)",
       "path": "/api/agent-brain?action=study&agent=all&count=2",
       "schedule": "0 9 * * *"
     },
     {
+      "_comment_self_study": "UTC 기준. 0 3 = 12:00 KST (자율 학습 + 예측 판정)",
       "path": "/api/agent-brain?action=self-study&agent=all",
       "schedule": "0 3 * * *"
     }
