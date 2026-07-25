@@ -16,8 +16,7 @@ import {
   saveMemory,
   getPool,
   saveStudyArchive,
-  getGPAHistory,
-  getLastRecommendation,
+  getLastPrescription,
   getWeakestDomain,
   getPastTopics,
 } from "./agent-brain.js";
@@ -200,13 +199,20 @@ const GRADE_EMOJI = {
   'D+': '🚨', 'D': '🚨', 'F': '❌',
 };
 
-// ── 명예교수 평가 프롬프트 ──
+// ── 명예교수 튜터링 프롬프트 ──
+// 채점만 하던 기존 프롬프트에 '가르치는 채널'을 추가:
+// 진단(무엇이 왜 틀렸는가) → 수업(직접 가르침) → 과제(다음 훈련) → 다음 회차 이행 검증
 const EVAL_PROMPT = `당신은 ${PROFESSOR.name} (${PROFESSOR.nameEn}) 교수입니다.
 ${PROFESSOR.title} / ${PROFESSOR.department}
 ${PROFESSOR.credentials}
 
 당신의 평가 철학: "${PROFESSOR.catchphrase}"
 ${PROFESSOR.personality}
+
+## 당신의 역할 (중요)
+당신은 시험 감독관이 아니라 **1:1 지도교수**입니다.
+점수를 매기는 것은 절반의 일이고, 나머지 절반은 **직접 가르치는 것**입니다.
+학생이 다음 주에 더 나아지지 않는다면, 그것은 학생이 아니라 당신의 실패입니다.
 
 ## 평가 대상
 아래 학생이 제출한 자율 학습 에세이를 **Graduate Research GPA** 4대 도메인으로 평가하세요.
@@ -227,8 +233,31 @@ ${PROFESSOR.personality}
 ### 4. 메타 인지적 연구 진화력 (Critique & Revision) 🌟
 자신의 연구 한계를 인지하고, 확증 편향에 빠지지 않으며, 과거 학습과의 연결 속에서 연구 방향을 동적으로 보정할 수 있는가?
 
+## 지도(Tutoring) 작성 지침 — 가장 중요한 부분
+
+### diagnosis (진단)
+"부족하다", "더 노력하라" 같은 추상적 지적은 금지. 리포트에서 **가장 결정적인 약점 딱 하나**를 골라,
+어느 대목이 왜 잘못됐는지 원문을 짚어가며 지목하세요. 두루뭉술하게 여러 개를 나열하지 마세요.
+
+### instruction (수업) 🎓
+여기가 당신이 실제로 **가르치는** 자리입니다. 진단한 약점을 메우기 위해:
+1) 필요한 개념·프레임워크를 당신의 언어로 직접 설명하고
+2) **올바른 예시를 당신이 직접 써서 보여주세요** (학생이 그대로 흉내 낼 수 있는 구체적 문장/구조/수식)
+3) 학생이 다음 리포트에서 즉시 따라 할 수 있는 형태여야 합니다
+지적만 하고 끝내면 이 항목은 실패입니다. 반드시 '어떻게 하는지'를 시연하세요.
+
+### assignment (과제)
+다음 학습 주제 1개. 단, 주제명만 던지지 말고 **반드시 포함해야 할 요소 2~3가지**를 함께 지정하세요.
+예: "○○ 분석 — 단, 반드시 (a) 표본 수를 명시하고 (b) 반대 가설을 1개 검토할 것"
+
+### priorCheck (지난 처방 이행 검증)
+입력에 [지난 회차 처방]이 주어진 경우, 학생이 그 가르침을 실제로 적용했는지 판정하세요.
+적용했으면 구체적으로 인정하고, 안 했으면 지적하세요. 지난 처방이 없으면 applied를 null로 두세요.
+**이 항목은 학생의 성장을 추적하는 유일한 근거이니 냉정하게 판단하세요.**
+
 ## 출력 형식 (순수 JSON만 반환, 다른 텍스트 금지)
 {
+  "priorCheck": { "applied": true 또는 false 또는 null, "comment": "지난 처방 이행 여부 판정 1~2문장" },
   "grades": {
     "goalAlignment": { "grade": "A~F(+/- 포함)", "gpa": 0.0~4.3, "feedback": "2문장 이내 구체적 피드백" },
     "planQuality": { "grade": "등급", "gpa": 점수, "feedback": "피드백" },
@@ -236,8 +265,10 @@ ${PROFESSOR.personality}
     "critiqueRevision": { "grade": "등급", "gpa": 점수, "feedback": "피드백" }
   },
   "overallGPA": 종합GPA(소수점1자리),
-  "professorComment": "윌리엄스 교수의 종합 소견 (3문장, 교수 말투로)",
-  "recommendation": "다음 학습에서 반드시 다뤄야 할 구체적 주제 1개"
+  "diagnosis": "가장 결정적인 약점 1개를 원문을 짚어 구체적으로 (2~3문장)",
+  "instruction": "약점을 메우는 실제 수업 — 개념 설명 + 당신이 직접 쓴 올바른 예시 (5~8문장)",
+  "assignment": "다음 과제 1개 + 반드시 포함할 요소 2~3가지",
+  "professorComment": "종합 소견 (2문장, 교수 말투로. 마지막엔 성장 가능성을 언급)"
 }`;
 
 // ═══════════════════════════════════════════════════
@@ -256,17 +287,24 @@ async function topicSelect(agentId) {
   const role = AGENT_ROLES[agentId];
   console.log(`[Self-Study] 📋 ${role.name} 학습 주제 선정 (DB 직접 쿼리)...`);
 
-  // L0: Frontmatter 로딩 — 교수의 마지막 recommendation 조회
-  const lastEval = await getLastRecommendation(agentId);
-  
-  // 규칙 1: 교수 recommendation이 있으면 무조건 따른다
-  if (lastEval?.recommendation && lastEval.recommendation.trim().length > 2) {
-    console.log(`[Self-Study] 🎯 교수 지시 주제: "${lastEval.recommendation}" (이전: ${lastEval.topic}, GPA ${lastEval.overall_gpa})`);
+  // L0: Frontmatter 로딩 — 교수의 마지막 '처방 전체'(진단·수업·과제) 조회
+  const lastEval = await getLastPrescription(agentId);
+
+  // 규칙 1: 교수의 과제가 있으면 무조건 따른다 + 지난 수업을 함께 물려받는다
+  if (lastEval?.assignment && lastEval.assignment.trim().length > 2) {
+    console.log(`[Self-Study] 🎯 교수 지시 과제: "${lastEval.assignment.substring(0, 60)}" (이전: ${lastEval.topic}, GPA ${lastEval.overall_gpa})`);
     return {
-      topic: lastEval.recommendation,
+      topic: lastEval.assignment,
       reason: `이전 학습(${lastEval.topic}) GPA ${lastEval.overall_gpa} → 교수 지시`,
-      search_query: lastEval.recommendation,
+      search_query: lastEval.assignment,
       source: 'professor_directive',
+      // 🎓 지난 수업 — research 단계에서 학생에게 전달되고, evaluate 단계에서 이행 검증됨
+      priorLesson: {
+        topic: lastEval.topic,
+        diagnosis: lastEval.diagnosis || '',
+        instruction: lastEval.instruction || '',
+        assignment: lastEval.assignment,
+      },
     };
   }
 
@@ -316,7 +354,24 @@ async function research(agentId, topic) {
     ? `\n⚠️ 이미 학습한 주제 (절대 반복 금지, 새로운 각도로 접근): ${pastTopics.join(', ')}`
     : '';
 
-  console.log(`[Self-Study] 🔍 ${role.name} 연구 시작: "${topic.topic}"`);
+  // 🎓 지난 수업 전달 — 교수가 가르친 내용이 학생에게 실제로 도달하는 유일한 경로
+  const lesson = topic.priorLesson;
+  const lessonNote = lesson?.instruction
+    ? `\n═══════════════════════════════════
+🎓 지난 수업에서 ${PROFESSOR.name} 교수가 직접 가르친 내용
+═══════════════════════════════════
+[지적받은 약점]
+${lesson.diagnosis}
+
+[교수의 가르침 — 이번 리포트에 반드시 적용할 것]
+${lesson.instruction}
+
+⚠️ 이번 리포트는 위 가르침을 적용했는지 여부로 평가받습니다.
+배운 것을 실제로 써먹으세요. 지난번과 같은 방식으로 쓰면 감점입니다.
+═══════════════════════════════════\n`
+    : '';
+
+  console.log(`[Self-Study] 🔍 ${role.name} 연구 시작: "${topic.topic.substring(0, 50)}"${lesson?.instruction ? ' (지난 수업 적용)' : ''}`);
   await new Promise(r => setTimeout(r, 2000)); // 연쇄 버스트 방지
 
   const result = await retryCall(async () => {
@@ -325,13 +380,15 @@ async function research(agentId, topic) {
       contents: [{ role: 'user', parts: [{ text: `## 연구 주제: ${topic.topic}
 ## 연구 사유: ${topic.reason}
 ## 연구자: ${role.name} (${role.title})
-## 적용 대상: 아날로그 홀리데이 (여행 카메라 렌탈 서비스)
-${dedupNote}
+## 적용 대상: 아날로그 홀리데이 (여행 카메라 렌탈 서비스 · 런칭 준비 단계)
+${lessonNote}${dedupNote}
 
 위 주제에 대해 학술 논문/산업 보고서 기반으로 연구 리포트를 작성하세요.
 필수 포함: 출처(저자, 연도), 수치/공식, 아날로그 홀리데이 적용 방안.
+⚠️ 아직 런칭 전이므로 자사 실적 수치를 지어내지 마세요. 외부 출처의 수치를 인용하고,
+   자사 적용은 "가정"임을 명시하세요. 없는 데이터를 있는 것처럼 쓰면 최하점입니다.
 ⚠️ 반드시 결론과 적용 방안까지 포함한 완결된 형태로 작성하세요. 문장이 중간에 끊기면 불합격 처리됩니다.
-600자 이내 핵심만 간결하게.` }] }],
+900자 이내 핵심만 간결하게.` }] }],
       config: {
         temperature: 0.4,
         tools: [{ googleSearch: {} }],
@@ -355,11 +412,19 @@ async function evaluate(agentId, rawReport, topic) {
   const role = AGENT_ROLES[agentId];
   const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
 
-  // L0: GPA Frontmatter만 로드 (~100토큰)
-  const gpaHistory = await getGPAHistory(agentId, 3);
-  const gpaLine = gpaHistory.length > 0
-    ? `최근 GPA: ${gpaHistory.map(g => `${g.topic}(${g.overall_gpa})`).join(', ')}`
-    : '첫 학습 (이전 성적 없음)';
+  // ⚖️ 과거 GPA 수치는 교수 입력에서 제외합니다.
+  // LLM 채점자는 제시된 이전 점수에 앵커링되어 답안 품질과 무관하게 유사 점수를 반복 산출합니다.
+  // 대신 아래 [지난 회차 처방]으로 '정성적 맥락'만 제공해 성장을 판정하게 합니다.
+
+  // 🎓 지난 회차 처방 — 이행 여부(priorCheck) 판정 근거
+  const lesson = topic.priorLesson;
+  const priorBlock = lesson?.instruction
+    ? `\n## [지난 회차 처방] — 학생이 이걸 적용했는지 반드시 판정하세요
+이전 주제: ${lesson.topic}
+당시 진단: ${lesson.diagnosis}
+당시 가르침: ${lesson.instruction}
+당시 과제: ${lesson.assignment}\n`
+    : '\n## [지난 회차 처방] 없음 (첫 지도) → priorCheck.applied 는 null\n';
 
   const evalInput = `## 학생 정보
 이름: ${role.name} / 소속: ${role.school}
@@ -372,10 +437,15 @@ async function evaluate(agentId, rawReport, topic) {
 
 ## 학습 주제: ${topic.topic}
 ## 학습 사유: ${topic.reason}
-## ${gpaLine}
+${priorBlock}
+## 채점 유의사항
+아날로그 홀리데이는 아직 런칭 전이라 자사 실적 데이터가 존재하지 않습니다.
+따라서 '실증 수행'은 자사 수치를 지어냈는지가 아니라,
+**외부 출처의 근거를 정확히 인용하고 자사 적용을 검증 가능한 가정으로 제시했는지**로 평가하세요.
+출처 없는 자사 수치를 단정적으로 쓴 경우 해당 도메인은 D 이하로 강등하세요.
 
-## 학생이 제출한 연구 리포트
-${rawReport.substring(0, 700)}`;
+## 학생이 제출한 연구 리포트 (전문)
+${rawReport.substring(0, 4000)}`;
 
   console.log(`[Self-Study] 🏛️ ${PROFESSOR.name} 교수 평가 중... (입력 ${evalInput.length}자)`);
   await new Promise(r => setTimeout(r, 2000)); // 쿨다운
@@ -422,31 +492,29 @@ ${rawReport.substring(0, 700)}`;
       console.error(`[Self-Study] ❌ 평가 extractJson 실패: ${e2.message}`);
       console.error(`[Self-Study] 📄 원본 응답 전문 (앞 500자): ${text.substring(0, 500)}`);
       
-      // Fix 3: 파싱 실패 시 이전 성공한 recommendation을 DB에서 복원
-      let fallbackRec = role.researchDirection.split(',')[0].trim();
-      try {
-        const lastGoodRec = await getLastRecommendation(agentId);
-        if (lastGoodRec?.recommendation) {
-          fallbackRec = lastGoodRec.recommendation;
-          console.log(`[Self-Study] 🔄 이전 성공 recommendation 복원: "${fallbackRec.substring(0, 60)}"`);
-        }
-      } catch { /* DB 조회 실패 시 기본값 사용 */ }
-      
+      // 🛡️ 채점 실패는 '결측'이지 'F학점'이 아닙니다.
+      // 기존에는 전 도메인 F/0점으로 기록되어 누적 GPA·약점 도메인·메타인지 프롬프트가
+      // 모두 오염됐습니다. 게다가 이 실패는 무작위가 아니라 '리포트가 길고 복잡할수록'
+      // 발생하므로, 잘 쓴 학생이 F를 받는 역방향 편향이 걸립니다.
+      // → parseError 플래그를 세워 성적 기록 자체를 건너뜁니다(saveStudyArchive에서 차단).
       evaluation = {
-        grades: {
-          goalAlignment: { grade: 'F', gpa: 0, feedback: '평가 파싱 오류' },
-          planQuality: { grade: 'F', gpa: 0, feedback: '평가 파싱 오류' },
-          actionExecution: { grade: 'F', gpa: 0, feedback: '평가 파싱 오류' },
-          critiqueRevision: { grade: 'F', gpa: 0, feedback: '평가 파싱 오류' },
-        },
-        overallGPA: 0,
-        professorComment: '평가 처리 중 오류 발생',
-        recommendation: fallbackRec,
+        parseError: true,
+        grades: null,
+        overallGPA: null,
+        professorComment: '채점 시스템 오류로 이번 회차는 성적에 반영되지 않습니다.',
       };
     }
   }
 
-  console.log(`[Self-Study] 🏛️ 평가 완료 — GPA ${evaluation.overallGPA}/4.3`);
+  if (evaluation.parseError) {
+    console.warn(`[Self-Study] ⚠️ 채점 파싱 실패 — 이번 회차 성적 미기록 (결측 처리)`);
+  } else {
+    const pc = evaluation.priorCheck;
+    const applied = pc?.applied === true ? '✅ 지난 처방 적용함'
+      : pc?.applied === false ? '❌ 지난 처방 미적용'
+      : '— 첫 지도';
+    console.log(`[Self-Study] 🏛️ 평가 완료 — GPA ${evaluation.overallGPA}/4.3 | ${applied}`);
+  }
   return evaluation;
 }
 
@@ -480,27 +548,36 @@ export async function runAutonomousStudy(agentId) {
     // ── Step 3: 평가 (LLM 1회, rawReport 직접 전달) ──
     const evaluation = await evaluate(agentId, rawReport, topic);
 
+    // ── 채점 실패 시: 아무것도 기록하지 않고 종료 ──
+    // 지난 회차의 정상 처방이 아카이브에 그대로 남으므로, 다음 회차가 같은 과제를 재수행합니다
+    // (마스터리 러닝: 숙달하지 못한 과제는 다시 푼다)
+    if (evaluation.parseError) {
+      console.warn(`[Self-Study] ⏭️ ${role.name}: 채점 실패로 이번 회차 미기록 — 다음 회차에 동일 과제 재수행`);
+      return { agent: agentId, agentName: role.name, status: 'grading_failed', topicSource: topic.source };
+    }
+
     // ── 저장: Progressive 3단계 ──
     // 저장 1: 학습 지식 (rawReport 500자 보존)
+    const gpaNum = Number(evaluation.overallGPA) || 0;
     const knowledge = {
       memory_type: 'fact',
       title: `[Self-Study] ${topic.topic.substring(0, 30)}`,
-      content: `${rawReport.substring(0, 500)} [GPA: ${evaluation.overallGPA || '?'}]`,
-      importance: Math.min(Math.max(Math.round(evaluation.overallGPA * 2) || 7, 6), 9),
+      content: `${rawReport.substring(0, 500)} [GPA: ${evaluation.overallGPA ?? '?'}]`,
+      importance: Math.min(Math.max(Math.round(gpaNum * 2), 6), 9),
       tags: ['self_study', 'evidence_based', agentId],
     };
     const savedId = await saveMemory(agentId, knowledge);
 
-    // 저장 2: 교수 평가 (lesson)
+    // 저장 2: 🎓 교수의 수업 내용 (lesson) — 점수가 아니라 '가르침'을 보존
     await saveMemory(agentId, {
       memory_type: 'lesson',
-      title: `[평가] ${topic.topic}`,
-      content: `${PROFESSOR.name} 교수 평가 — GPA ${evaluation.overallGPA}/4.3. ${evaluation.professorComment || ''} [다음 과제: ${evaluation.recommendation || '미지정'}]`,
-      importance: 7,
-      tags: ['self_study', 'evaluation', 'gpa', agentId],
+      title: `[수업] ${topic.topic.substring(0, 30)}`,
+      content: `[진단] ${evaluation.diagnosis || '-'}\n[${PROFESSOR.name} 교수의 가르침] ${evaluation.instruction || '-'}`,
+      importance: 8,
+      tags: ['self_study', 'tutoring', agentId],
     });
 
-    // 저장 3: GPA 아카이브 (Frontmatter 역할 — 다음 topicSelect에서 사용)
+    // 저장 3: GPA 아카이브 (Frontmatter 역할 — 다음 topicSelect에서 처방 전체를 물려받음)
     await saveStudyArchive(agentId, topic.topic, rawReport.substring(0, 300), evaluation);
 
     // 크로스 에이전트 공유
@@ -591,20 +668,49 @@ async function sendEvalToDiscord(results) {
           evalCount++;
         }
 
+        // 🔁 지난 처방 이행 검증 (성장 추적의 유일한 근거)
+        const pc = ev.evaluation?.priorCheck;
+        if (pc && pc.applied !== null && pc.applied !== undefined) {
+          fields.push({
+            name: pc.applied ? '🔁 지난 수업 이행 ✅' : '🔁 지난 수업 이행 ❌',
+            value: (pc.comment || '').substring(0, 1020),
+            inline: false,
+          });
+        }
+
+        // 🔬 진단
+        if (ev.evaluation?.diagnosis) {
+          fields.push({
+            name: '🔬 진단',
+            value: ev.evaluation.diagnosis.substring(0, 1020),
+            inline: false,
+          });
+        }
+
+        // 🎓 교수의 수업 — 이번 개편의 핵심
+        if (ev.evaluation?.instruction) {
+          fields.push({
+            name: `🎓 ${PROFESSOR.name} 교수의 수업`,
+            value: ev.evaluation.instruction.substring(0, 1020),
+            inline: false,
+          });
+        }
+
         // 교수 코멘트
         if (ev.evaluation?.professorComment) {
           fields.push({
             name: '💬 교수 소견',
-            value: ev.evaluation.professorComment,
+            value: ev.evaluation.professorComment.substring(0, 1020),
             inline: false,
           });
         }
 
         // 다음 과제
-        if (ev.evaluation?.recommendation) {
+        const nextAssignment = ev.evaluation?.assignment || ev.evaluation?.recommendation;
+        if (nextAssignment) {
           fields.push({
             name: '📌 다음 과제',
-            value: ev.evaluation.recommendation,
+            value: nextAssignment.substring(0, 1020),
             inline: false,
           });
         }
@@ -626,14 +732,17 @@ async function sendEvalToDiscord(results) {
     // ── 실패 케이스: 에러 사유 카드 ──
     } else {
       failCount++;
+      const isGradingFail = r.status === 'grading_failed';
       const errorMsg = r.error
         || r.learned?.find(l => l.error)?.error
-        || (r.status === 'no_gaps_found' ? '진단 결과 학습할 주제를 도출하지 못했습니다.' : `상태: ${r.status}`);
+        || (isGradingFail ? '채점 응답 파싱 실패 — 성적에 반영하지 않았습니다.' : `상태: ${r.status}`);
 
       embeds.push({
-        title: `⚠️ ${role.name} — 학습 실패`,
-        description: `🔴 **원인**: ${errorMsg}\n\n이 에이전트의 학습 파이프라인에서 오류가 발생했습니다.`,
-        color: 0x6B7280, // 회색
+        title: isGradingFail ? `📋 ${role.name} — 이번 회차 채점 보류` : `⚠️ ${role.name} — 학습 실패`,
+        description: isGradingFail
+          ? `🟡 **사유**: ${errorMsg}\n\n학생의 잘못이 아닌 시스템 오류이므로 **GPA에 기록되지 않았습니다**.\n다음 회차에 동일 과제를 다시 수행합니다.`
+          : `🔴 **원인**: ${errorMsg}\n\n이 에이전트의 학습 파이프라인에서 오류가 발생했습니다.`,
+        color: isGradingFail ? 0xF59E0B : 0x6B7280,
         footer: { text: `${role.school}` },
       });
     }

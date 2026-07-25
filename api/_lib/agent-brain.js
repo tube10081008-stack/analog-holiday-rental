@@ -402,6 +402,15 @@ export async function reinforceMemories(agentId, usedMemoryIds) {
 export async function saveStudyArchive(agentId, topic, essay, evaluation) {
   const pool = getPool();
   if (!pool) return;
+
+  // 🛡️ 채점 실패(JSON 파싱 오류)는 '학업 실패'가 아니라 '결측'입니다.
+  // 0점으로 기록하면 누적 GPA·약점 도메인·메타인지 프롬프트가 모두 오염되고,
+  // 다음 회차가 지난 처방 대신 빈 값을 물려받습니다. 기록하지 않고 건너뜁니다.
+  if (evaluation?.parseError) {
+    console.warn(`[Brain] ⏭️ ${agentId}: 채점 파싱 실패 — 성적/아카이브 미기록 (결측 처리)`);
+    return;
+  }
+
   const archiveId = `sa_${agentId}_${Date.now()}`;
   try {
     await pool.query(
@@ -468,6 +477,35 @@ export async function getLastRecommendation(agentId) {
       [agentId]
     );
     return res.rows[0] || null;
+  } catch { return null; }
+}
+
+/**
+ * 🎓 지난 회차 교수의 '처방 전체'를 조회합니다 (튜터링 루프 폐쇄용).
+ * recommendation만 보던 기존 방식과 달리 진단·수업·과제를 함께 반환해,
+ * ① 학생이 지난 수업을 실제로 전달받고 ② 교수가 이행 여부를 검증할 수 있게 합니다.
+ * 구 스키마(assignment 없이 recommendation만 있는 아카이브)와도 호환됩니다.
+ */
+export async function getLastPrescription(agentId) {
+  const pool = getPool();
+  if (!pool) return null;
+  try {
+    const res = await pool.query(
+      `SELECT topic,
+              overall_gpa,
+              evaluation->>'diagnosis'      AS diagnosis,
+              evaluation->>'instruction'    AS instruction,
+              evaluation->>'assignment'     AS assignment,
+              evaluation->>'recommendation' AS recommendation
+       FROM study_archives
+       WHERE agent_id = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [agentId]
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    // 구 스키마 폴백: assignment가 없으면 recommendation을 과제로 사용
+    return { ...row, assignment: row.assignment || row.recommendation || '' };
   } catch { return null; }
 }
 
