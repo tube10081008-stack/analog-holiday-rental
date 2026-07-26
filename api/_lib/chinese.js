@@ -65,9 +65,199 @@ export async function ensureChineseTables() {
       submitted_at TIMESTAMPTZ
     );
     CREATE INDEX IF NOT EXISTS idx_cs_status ON chinese_sessions(status, created_at DESC);
+    CREATE TABLE IF NOT EXISTS chinese_xp (
+      id SERIAL PRIMARY KEY,
+      amount INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      ref TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_cx_ref ON chinese_xp(ref) WHERE ref IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS chinese_stages (
+      id TEXT PRIMARY KEY,
+      level INTEGER NOT NULL,
+      scene_index INTEGER NOT NULL,
+      best_stars INTEGER NOT NULL DEFAULT 0,
+      best_score REAL,
+      plays INTEGER NOT NULL DEFAULT 0,
+      last_played_at TIMESTAMPTZ
+    );
     INSERT INTO chinese_profile (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
   `).catch(() => { tablesReady = null; });
   await tablesReady;
+}
+
+// ═══════════════════════════════════════════════════
+// 🎮 게이미피케이션
+//
+// 설계 원칙: **보상은 '실력의 증거'여야지 '출석의 대가'여선 안 된다.**
+// 과잉정당화 효과(외적 보상이 내적 동기를 밀어냄)와 굿하트 법칙을 피하기 위해,
+// XP는 접속·제출 횟수가 아니라 아래 세 가지에서만 발생합니다:
+//   1) 카드 등급이 실제로 올라갔을 때 (= 진짜로 외웠을 때)
+//   2) 실전 스테이지에서 별을 땄을 때 (= 힌트 없이 해냈을 때)
+//   3) 수업 채점이 70점을 넘겼을 때 (= 대충 낸 답안은 0 XP)
+// 로그인 보상·스트릭 복구 아이템은 의도적으로 만들지 않았습니다.
+// ═══════════════════════════════════════════════════
+
+export const TIERS = {
+  new:      { key: 'new',      label: '신규',   emoji: '🟤', order: 1 },
+  learning: { key: 'learning', label: '학습중', emoji: '🔵', order: 2 },
+  mature:   { key: 'mature',   label: '숙성',   emoji: '🟡', order: 3 },
+  master:   { key: 'master',   label: '마스터', emoji: '🌈', order: 4 },
+};
+
+/** SRS 상태로부터 카드 등급을 도출합니다 (별도 컬럼 없이 파생) */
+export function cardTier(card) {
+  const reps = Number(card.repetitions) || 0;
+  const iv = Number(card.interval_days) || 0;
+  const lapses = Number(card.lapses) || 0;
+  if (reps === 0) return 'new';
+  if (iv >= 60 && lapses === 0) return 'master';
+  if (iv >= 21) return 'mature';
+  return 'learning';
+}
+
+// 등급 도달 시 지급 XP (누적이 아니라 '처음 도달'에만)
+const TIER_XP = { new: 0, learning: 10, mature: 30, master: 100 };
+const STAR_XP = { 1: 50, 2: 120, 3: 250 };
+
+/** XP 적립. ref가 같으면 중복 지급되지 않습니다 (같은 성취로 두 번 못 받음) */
+export async function grantXp(amount, reason, ref = null) {
+  const pool = getPool(); if (!pool || amount <= 0) return 0;
+  await ensureChineseTables();
+  try {
+    const r = await pool.query(
+      `INSERT INTO chinese_xp (amount, reason, ref) VALUES ($1,$2,$3)
+       ON CONFLICT (ref) DO NOTHING RETURNING amount`,
+      [amount, reason, ref]
+    );
+    return r.rows[0]?.amount || 0;
+  } catch { return 0; }
+}
+
+/**
+ * 레벨 곡선: n레벨까지 누적 XP = 75·n·(n+1)
+ * Lv2까지 150, Lv3까지 450, Lv4까지 900 — 초반은 빠르고 뒤로 갈수록 완만합니다.
+ */
+export function levelFromXp(xp) {
+  const n = Math.floor((-1 + Math.sqrt(1 + (4 * Math.max(0, xp)) / 75)) / 2);
+  const level = Math.max(1, n + 1);
+  const cur = 75 * (level - 1) * level;
+  const next = 75 * level * (level + 1);
+  return {
+    level,
+    xp,
+    intoLevel: xp - cur,
+    needForNext: next - cur,
+    progress: Math.min(100, Math.round(((xp - cur) / (next - cur)) * 100)),
+  };
+}
+
+export async function getXpState() {
+  const pool = getPool(); if (!pool) return levelFromXp(0);
+  await ensureChineseTables();
+  const r = await pool.query(`SELECT COALESCE(SUM(amount),0)::int AS xp FROM chinese_xp`);
+  return levelFromXp(r.rows[0]?.xp || 0);
+}
+
+/** 도감 — 레벨별 수집 현황. 목표치는 그 레벨 실사용에 필요한 어휘 규모 기준 */
+const COLLECTION_GOAL = { 1: 150, 2: 300, 3: 500 };
+
+export async function getCollection() {
+  const pool = getPool(); if (!pool) return [];
+  await ensureChineseTables();
+  const r = await pool.query(
+    `SELECT id, hanzi, pinyin, meaning, level, repetitions, interval_days, lapses, due_at
+     FROM chinese_cards ORDER BY level ASC, interval_days DESC, hanzi ASC`
+  );
+  const byLevel = {};
+  for (const c of r.rows) {
+    const lv = c.level || 1;
+    (byLevel[lv] ||= []).push({
+      id: c.id, hanzi: c.hanzi, pinyin: c.pinyin, meaning: c.meaning,
+      tier: cardTier(c),
+    });
+  }
+  return [1, 2, 3].map(lv => {
+    const cards = byLevel[lv] || [];
+    const counts = { new: 0, learning: 0, mature: 0, master: 0 };
+    cards.forEach(c => counts[c.tier]++);
+    return {
+      level: lv,
+      label: SCENES[lv]?.label || `레벨 ${lv}`,
+      goal: COLLECTION_GOAL[lv],
+      owned: cards.length,
+      counts,
+      cards,
+    };
+  });
+}
+
+// ── 실전 스테이지 ───────────────────────────────────
+// 겔럭시디펜스식 해금: '며칠 했나'가 아니라 '몇 장을 진짜로 외웠나'가 열쇠입니다.
+// n번째 스테이지는 그 레벨의 숙성(mature 이상) 카드 3n장을 요구합니다.
+
+export function stageRequirement(sceneIndex) {
+  return sceneIndex * 3;
+}
+
+export async function getStages(level) {
+  const pool = getPool(); if (!pool) return [];
+  await ensureChineseTables();
+
+  const cardRes = await pool.query(
+    `SELECT repetitions, interval_days, lapses FROM chinese_cards WHERE level = $1`, [level]
+  );
+  const matured = cardRes.rows.filter(c => ['mature', 'master'].includes(cardTier(c))).length;
+
+  const recRes = await pool.query(
+    `SELECT id, scene_index, best_stars, best_score, plays FROM chinese_stages WHERE level = $1`, [level]
+  );
+  const recMap = Object.fromEntries(recRes.rows.map(r => [r.scene_index, r]));
+
+  const list = SCENES[level]?.list || [];
+  return {
+    matured,
+    stages: list.map((s, i) => {
+      const need = stageRequirement(i);
+      const rec = recMap[i];
+      return {
+        id: `st_${level}_${i}`, level, sceneIndex: i,
+        cn: s.cn, ko: s.ko,
+        required: need,
+        unlocked: matured >= need,
+        stars: rec?.best_stars || 0,
+        bestScore: rec?.best_score ?? null,
+        plays: rec?.plays || 0,
+      };
+    }),
+  };
+}
+
+export async function saveStageResult(level, sceneIndex, stars, score) {
+  const pool = getPool(); if (!pool) return { newBest: false, xp: 0 };
+  const id = `st_${level}_${sceneIndex}`;
+  const cur = await pool.query(`SELECT best_stars, best_score FROM chinese_stages WHERE id=$1`, [id]);
+  const prevStars = cur.rows[0]?.best_stars || 0;
+  const newBest = stars > prevStars;
+
+  await pool.query(
+    `INSERT INTO chinese_stages (id, level, scene_index, best_stars, best_score, plays, last_played_at)
+     VALUES ($1,$2,$3,$4,$5,1,NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       best_stars = GREATEST(chinese_stages.best_stars, EXCLUDED.best_stars),
+       best_score = GREATEST(COALESCE(chinese_stages.best_score,0), EXCLUDED.best_score),
+       plays = chinese_stages.plays + 1,
+       last_played_at = NOW()`,
+    [id, level, sceneIndex, stars, score]
+  );
+
+  // 별은 '최고 기록 갱신분'만 XP로 환산 — 같은 스테이지를 반복해도 XP가 무한 생성되지 않습니다
+  let xp = 0;
+  for (let s = prevStars + 1; s <= stars; s++) {
+    xp += await grantXp(STAR_XP[s] || 0, `스테이지 ★${s}`, `${id}_star${s}`);
+  }
+  return { newBest, xp, prevStars };
 }
 
 // ═══════════════════════════════════════════════════
@@ -191,6 +381,7 @@ export async function reviewCard(cardId, quality) {
   const card = cur.rows[0];
   if (!card) return null;
 
+  const tierBefore = cardTier(card);
   const next = sm2(card, Number(quality));
   await pool.query(
     `UPDATE chinese_cards
@@ -200,7 +391,91 @@ export async function reviewCard(cardId, quality) {
     [next.ease, next.interval_days, next.repetitions, next.lapses,
      String(next.interval_days), quality < 2 ? 'fail' : 'pass', cardId]
   );
-  return { ...next, hanzi: card.hanzi };
+
+  // 🎮 등급이 실제로 올라갔을 때만 XP — '외웠다는 증거'에 대한 보상입니다
+  const tierAfter = cardTier({ ...card, ...next });
+  let xpGained = 0, promoted = null;
+  if (TIERS[tierAfter].order > TIERS[tierBefore].order) {
+    xpGained = await grantXp(TIER_XP[tierAfter] || 0, `카드 ${TIERS[tierAfter].label} 도달`, `${cardId}_${tierAfter}`);
+    promoted = { from: tierBefore, to: tierAfter, ...TIERS[tierAfter] };
+  }
+  return { ...next, hanzi: card.hanzi, tier: tierAfter, promoted, xpGained };
+}
+
+// ═══════════════════════════════════════════════════
+// ⚔️ 실전 스테이지 — 힌트 없이 그 상황을 해내는 시험
+// ═══════════════════════════════════════════════════
+
+/** 스테이지 미션 생성 (매번 새로 뽑아 암기를 방지합니다) */
+export async function generateStageMissions(level, sceneIndex) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY가 설정되지 않았습니다.');
+  const ai = new GoogleGenAI({ apiKey });
+  const scene = pickScene(level, sceneIndex);
+
+  const prompt = `${TEACHER}
+
+## 실전 스테이지 출제
+장면: ${scene.cn} — ${scene.ko} (레벨 ${level})
+
+학생이 **힌트도 병음도 없이** 이 상황에 중국어로 대응하는 시험입니다.
+미션 3개를 만드세요. 각 미션은:
+- situation: 한국어로 된 상황 설명 (학생이 무엇을 말해야 하는지 명확하게)
+- hint: 사용해야 할 기능 (예: "가격을 묻기", "정중히 거절하기") — 정답 문장은 절대 쓰지 마세요
+- 난이도는 레벨 ${level}에 맞게. 1레벨은 한 문장, 3레벨은 두세 문장 분량.
+
+## 순수 JSON만 출력
+{"missions":[{"situation":"...","hint":"..."}]}`;
+
+  const result = await ai.models.generateContent({
+    model: MODEL_ID, contents: prompt,
+    config: { temperature: 0.8, responseMimeType: 'application/json' },
+  });
+  const p = safeJson(result?.candidates?.[0]?.content?.parts?.[0]?.text || result?.text || '{}');
+  if (!p?.missions?.length) throw new Error('스테이지 생성에 실패했습니다.');
+  return { scene, missions: p.missions.slice(0, 3) };
+}
+
+/** 스테이지 채점 → 0~100점 + 별 (60/80/95 기준) */
+export async function gradeStage(level, sceneIndex, missions, answers) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY가 설정되지 않았습니다.');
+  const ai = new GoogleGenAI({ apiKey });
+  const scene = pickScene(level, sceneIndex);
+
+  const body = missions.map((m, i) =>
+    `[미션 ${i + 1}] ${m.situation}\n학생 답변: ${answers[i]?.trim() || '(미응답)'}`
+  ).join('\n\n');
+
+  const systemPrompt = `${TEACHER}
+
+## 실전 스테이지 채점
+학생은 힌트 없이 답했습니다. 실전이므로 평소 수업보다 **엄격하게** 보세요.
+미응답은 0점입니다.
+
+각 미션을 0~100으로 채점하고, 틀린 곳은 반드시 고쳐 쓰세요.
+한국어 간섭(한자어 오용·어순·了 남용·양사 누락)이 보이면 반드시 지적하세요.
+
+## 순수 JSON만 출력
+{
+  "missionScores": [{"index":1,"score":0,"fixed":"고쳐 쓴 문장 또는 원문이 맞으면 그대로","comment":"1문장"}],
+  "total": 0,
+  "comment": "총평 2문장. 한국어로."
+}`;
+
+  const result = await ai.models.generateContent({
+    model: MODEL_ID,
+    contents: [{ role: 'user', parts: [{ text: `## 장면: ${scene.cn} — ${scene.ko}\n\n${body}` }] }],
+    config: { systemInstruction: systemPrompt, temperature: 0.3, responseMimeType: 'application/json' },
+  });
+
+  const p = safeJson(result?.candidates?.[0]?.content?.parts?.[0]?.text || result?.text || '');
+  if (!p?.missionScores || typeof p.total !== 'number') {
+    return { parseError: true, comment: '채점 오류입니다. 다시 시도해 주세요.' };
+  }
+  const total = Math.max(0, Math.min(100, Math.round(p.total)));
+  const stars = total >= 95 ? 3 : total >= 80 ? 2 : total >= 60 ? 1 : 0;
+  return { ...p, total, stars };
 }
 
 /** 오늘 배운 표현을 카드로 등록 (중복은 한자 기준으로 무시) */

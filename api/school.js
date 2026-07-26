@@ -235,7 +235,23 @@ async function handleChinese(req, res, query, body) {
 
     if (action === "review") {
       // 플래시카드 — 정답(뜻)은 클라이언트가 뒤집을 때 보여주므로 함께 내려도 무방합니다
-      return json(res, 200, { ok: true, cards: await CN.getDueCards(12), stats: await CN.getCardStats() });
+      const cards = await CN.getDueCards(12);
+      return json(res, 200, {
+        ok: true,
+        cards: cards.map(c => ({ ...c, tier: CN.cardTier(c) })),
+        stats: await CN.getCardStats(), xp: await CN.getXpState(),
+      });
+    }
+
+    if (action === "collection") {
+      return json(res, 200, { ok: true, collection: await CN.getCollection(), xp: await CN.getXpState() });
+    }
+
+    if (action === "stages") {
+      const profile = await CN.getProfile();
+      const lv = Number(query.level) || profile?.level || 1;
+      const data = await CN.getStages(lv);
+      return json(res, 200, { ok: true, level: lv, ...data, xp: await CN.getXpState() });
     }
 
     if (action === "history") {
@@ -254,7 +270,31 @@ async function handleChinese(req, res, query, body) {
     if (body.action === "review") {
       const r = await CN.reviewCard(body.cardId, body.quality);
       if (!r) return json(res, 404, { ok: false, message: "카드를 찾을 수 없습니다." });
-      return json(res, 200, { ok: true, result: r, stats: await CN.getCardStats() });
+      return json(res, 200, { ok: true, result: r, stats: await CN.getCardStats(), xp: await CN.getXpState() });
+    }
+
+    if (body.action === "stageStart") {
+      const { level, sceneIndex } = body;
+      const { stages } = await CN.getStages(Number(level));
+      const target = stages.find(s => s.sceneIndex === Number(sceneIndex));
+      if (!target) return json(res, 404, { ok: false, message: "스테이지를 찾을 수 없습니다." });
+      if (!target.unlocked) {
+        return json(res, 403, { ok: false, message: `아직 잠겨 있습니다. 이 레벨의 숙성 카드 ${target.required}장이 필요합니다.` });
+      }
+      const gen = await CN.generateStageMissions(Number(level), Number(sceneIndex));
+      return json(res, 200, { ok: true, stage: target, missions: gen.missions });
+    }
+
+    if (body.action === "stageSubmit") {
+      const { level, sceneIndex, missions, answers } = body;
+      if (!Array.isArray(missions) || !Array.isArray(answers)) {
+        return json(res, 400, { ok: false, message: "제출 형식이 올바르지 않습니다." });
+      }
+      const result = await CN.gradeStage(Number(level), Number(sceneIndex), missions, answers);
+      if (result.parseError) return json(res, 200, { ok: true, parseError: true, message: result.comment });
+
+      const saved = await CN.saveStageResult(Number(level), Number(sceneIndex), result.stars, result.total);
+      return json(res, 200, { ok: true, result, ...saved, xp: await CN.getXpState() });
     }
 
     if (body.action === "submit") {
@@ -281,9 +321,17 @@ async function handleChinese(req, res, query, body) {
       const focus = parseJ(open.focus) || [];
       const added = await CN.addCards([...focus, ...(evaluation.newCards || [])], open.level);
 
+      // 🎮 XP는 70점 이상일 때만 — 대충 낸 답안에는 아무 보상도 없습니다
+      const score = Number(evaluation.overall) || 0;
+      const lessonXp = score >= 70
+        ? await CN.grantXp(Math.round(score / 2), `수업 통과 (${score}점)`, `lesson_${open.id}`)
+        : 0;
+
       return json(res, 200, {
-        ok: true, evaluation, cardsAdded: added,
+        ok: true, evaluation, cardsAdded: added, lessonXp,
+        xpEarnedNote: score >= 70 ? null : '70점 이상부터 XP가 적립됩니다.',
         cardStats: await CN.getCardStats(), stats: await CN.getChineseStats(),
+        xp: await CN.getXpState(),
       });
     }
 

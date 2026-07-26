@@ -83,6 +83,8 @@ async function loadTab(tab) {
   try {
     if (tab === 'today') await renderToday();
     else if (tab === 'review') await renderReview();
+    else if (tab === 'stage') await renderStages();
+    else if (tab === 'collection') await renderCollection();
     else await renderHistory();
   } catch (err) {
     $('#view').innerHTML = `<div class="card"><p class="block-body">${esc(err.message)}</p>
@@ -104,11 +106,40 @@ function renderStats(s, cs, level) {
   else badge.hidden = true;
 }
 
+/* ── XP · 레벨 ── */
+function renderXp(xp) {
+  if (!xp) return;
+  $('#xpBar').hidden = false;
+  $('#xpLevel').textContent = xp.level;
+  $('#xpFill').style.width = `${xp.progress}%`;
+  $('#xpText').textContent = `${xp.intoLevel} / ${xp.needForNext}`;
+}
+
+function xpToast(amount, label) {
+  if (!amount) return;
+  document.querySelector('.xp-toast')?.remove();
+  const el = document.createElement('div');
+  el.className = 'xp-toast';
+  el.innerHTML = `<b>+${amount} XP</b><span>${esc(label)}</span>`;
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add('out'), 1800);
+  setTimeout(() => el.remove(), 2300);
+}
+
+const TIER_META = {
+  new:      { label: '신규',   cls: 'tier-new' },
+  learning: { label: '학습중', cls: 'tier-learning' },
+  mature:   { label: '숙성',   cls: 'tier-mature' },
+  master:   { label: '마스터', cls: 'tier-master' },
+};
+const tierBadge = (t) => `<span class="tier-badge ${TIER_META[t]?.cls || ''}">${TIER_META[t]?.label || t}</span>`;
+
 /* ═══ 오늘의 수업 ═══ */
 async function renderToday() {
   const d = await api('?action=today');
   today = d; speechHeard = '';
   renderStats(d.stats, d.cardStats, d.profile.level);
+  if (d.xp) renderXp(d.xp);
   const S = d.session;
 
   const dlg = (S.dialogue || []).map(l => `
@@ -261,6 +292,8 @@ const SCORE_LABEL = { accuracy: '정확성', tone: '성조·발음', naturalness
 function renderResult(d) {
   const e = d.evaluation;
   renderStats(d.stats, d.cardStats, today.profile.level);
+  if (d.xp) renderXp(d.xp);
+  if (d.lessonXp) xpToast(d.lessonXp, '수업 통과');
   const sc = e.scores || {};
 
   $('#view').innerHTML = `
@@ -315,6 +348,8 @@ function renderResult(d) {
       <div class="block-body">${esc(e.teacherComment || '')}</div></div>
 
       ${d.cardsAdded ? `<p class="hint" style="margin-top:14px">📇 새 단어 ${d.cardsAdded}개가 복습 카드에 추가되었습니다.</p>` : ''}
+      ${d.lessonXp ? `<p class="hint">🎮 +${d.lessonXp} XP 획득</p>` : ''}
+      ${d.xpEarnedNote ? `<p class="hint">🎮 ${esc(d.xpEarnedNote)}</p>` : ''}
       <button class="btn-primary" style="margin-top:16px" onclick="location.reload()">다음 수업 받기</button>
     </div>`;
 }
@@ -324,6 +359,7 @@ async function renderReview() {
   const d = await api('?action=review');
   cards = d.cards || []; cardIdx = 0; flipped = false;
   renderStats(null, d.stats, today?.profile?.level);
+  renderXp(d.xp);
   if (!cards.length) {
     $('#view').innerHTML = `<div class="empty">🎉 오늘 복습할 카드가 없습니다.<br/>
       새 단어는 수업을 마치면 자동으로 쌓입니다.<br/><br/>
@@ -344,6 +380,7 @@ function drawCard() {
     <p class="hint" style="text-align:center;margin-bottom:10px">${cardIdx + 1} / ${cards.length}</p>
     <div class="card flash fade-in" id="flashCard">
       <div>
+        ${c.tier ? `<div style="margin-bottom:10px">${tierBadge(c.tier)}</div>` : ''}
         <div class="hz">${esc(c.hanzi)}</div>
         ${flipped ? `
           <div class="py">${esc(c.pinyin)}</div>
@@ -367,7 +404,9 @@ function drawCard() {
   $('#flashCard').addEventListener('click', () => { if (!flipped) { flipped = true; drawCard(); } });
   document.querySelectorAll('.q-btn').forEach(b =>
     b.addEventListener('click', async () => {
-      await post({ action: 'review', cardId: c.id, quality: Number(b.dataset.q) });
+      const r = await post({ action: 'review', cardId: c.id, quality: Number(b.dataset.q) });
+      if (r.xp) renderXp(r.xp);
+      if (r.result?.promoted) xpToast(r.result.xpGained, `${r.result.hanzi} → ${TIER_META[r.result.promoted.to].label} 승급!`);
       cardIdx++; flipped = false; drawCard();
     }));
 }
@@ -400,3 +439,151 @@ async function renderHistory() {
 }
 
 if (adminKey) { $('#keyInput').value = adminKey; enter(); }
+
+/* ═══ ⚔️ 실전 스테이지 ═══ */
+let stageState = null;
+
+async function renderStages() {
+  const d = await api('?action=stages');
+  renderXp(d.xp);
+  $('#levelLabel').textContent = LEVEL_NAME[d.level] || '중국어 학당';
+  const cells = d.stages.map((s, i) => {
+    const stars = '★'.repeat(s.stars) + '☆'.repeat(3 - s.stars);
+    return `<div class="stage-cell ${s.unlocked ? (s.stars ? 'cleared' : '') : 'locked'}"
+      ${s.unlocked ? `data-stage="${s.sceneIndex}"` : ''}>
+      <div class="stage-no">STAGE ${String(i + 1).padStart(2, '0')}</div>
+      <div class="stage-cn">${esc(s.cn)}</div>
+      <div class="stage-ko">${esc(s.ko)}</div>
+      ${s.unlocked
+        ? `<div class="stage-stars" style="color:${s.stars ? 'var(--gold)' : 'var(--faint)'}">${stars}</div>`
+        : `<div class="stage-lock">🔒 숙성 ${s.required}장 필요</div>`}
+    </div>`;
+  }).join('');
+
+  $('#view').innerHTML = `
+    <div class="card fade-in">
+      <p class="card-eyebrow">实战关卡 · 실전 스테이지</p>
+      <h2>힌트 없이 해내기</h2>
+      <p class="hint">병음도 예문도 없습니다. 그 상황에서 실제로 말할 수 있는지만 봅니다.<br/>
+        해금 열쇠는 <b style="color:var(--gold)">숙성된 카드 수</b>입니다 — 출석이 아니라 실력이 문을 엽니다.</p>
+      <p class="hint" style="margin-top:8px">현재 레벨 ${d.level} 숙성 카드 <b style="color:var(--gold)">${d.matured}장</b></p>
+    </div>
+    <div class="stage-grid">${cells}</div>`;
+
+  document.querySelectorAll('[data-stage]').forEach(el =>
+    el.addEventListener('click', () => startStage(d.level, Number(el.dataset.stage))));
+}
+
+async function startStage(level, sceneIndex) {
+  $('#view').innerHTML = `<div class="loading">陈老师가 문제를 내는 중…</div>`;
+  try {
+    const d = await post({ action: 'stageStart', level, sceneIndex });
+    stageState = { level, sceneIndex, missions: d.missions, stage: d.stage };
+    $('#view').innerHTML = `
+      <div class="card fade-in">
+        <p class="card-eyebrow">STAGE · ${esc(d.stage.cn)}</p>
+        <h2>${esc(d.stage.ko)}</h2>
+        <p class="hint">🚫 힌트·병음 없음 · 실전 채점 · ★95점 ★★80점 ★☆☆60점</p>
+      </div>
+      ${d.missions.map((m, i) => `
+        <div class="card fade-in">
+          <div class="mission">
+            <div class="mission-no">MISSION ${i + 1}</div>
+            <div class="mission-sit">${esc(m.situation)}</div>
+            <div class="mission-hint">💡 ${esc(m.hint)}</div>
+            <textarea rows="2" data-ans="${i}" placeholder="중국어로 답하세요"></textarea>
+          </div>
+        </div>`).join('')}
+      <button id="stageSubmit" class="btn-primary">도전 완료</button>
+      <button class="btn-ghost" onclick="location.reload()">포기하고 나가기</button>
+      <p class="hint" id="stageHint"></p>`;
+    $('#stageSubmit').addEventListener('click', submitStage);
+  } catch (err) {
+    $('#view').innerHTML = `<div class="card"><p class="block-body">${esc(err.message)}</p>
+      <button class="btn-ghost" onclick="location.reload()">돌아가기</button></div>`;
+  }
+}
+
+async function submitStage() {
+  const answers = [...document.querySelectorAll('[data-ans]')].map(el => el.value.trim());
+  if (answers.every(a => !a)) { $('#stageHint').textContent = '최소 하나는 답해주세요.'; return; }
+  const btn = $('#stageSubmit');
+  btn.disabled = true; btn.textContent = '채점 중…';
+  try {
+    const d = await post({ action: 'stageSubmit', ...stageState, answers });
+    if (d.parseError) { $('#stageHint').textContent = d.message; btn.disabled = false; btn.textContent = '다시 제출'; return; }
+    renderStageResult(d);
+  } catch (err) {
+    $('#stageHint').textContent = err.message;
+    btn.disabled = false; btn.textContent = '도전 완료';
+  }
+}
+
+function renderStageResult(d) {
+  const r = d.result;
+  renderXp(d.xp);
+  if (d.xp && d.newBest) xpToast(STAR_XP_TABLE[r.stars] || 0, `★${r.stars} 최고 기록!`);
+  $('#view').innerHTML = `
+    <div class="card fade-in">
+      <p class="card-eyebrow">关卡结果 · 스테이지 결과</p>
+      <div class="star-hero">
+        <div class="stars" style="color:${r.stars ? 'var(--gold)' : 'var(--faint)'}">
+          ${'★'.repeat(r.stars)}${'☆'.repeat(3 - r.stars)}</div>
+        <div class="pt">${r.total}<span style="font-size:15px;color:var(--faint)"> / 100</span></div>
+        ${d.newBest ? `<div><span class="new-best">🎉 최고 기록 갱신</span></div>` : ''}
+      </div>
+      ${(r.missionScores || []).map((m, i) => `
+        <div class="block">
+          <div class="block-title">MISSION ${m.index || i + 1} · ${m.score}점</div>
+          <div class="fix">
+            <div class="good">${esc(m.fixed || '')}</div>
+            <div class="why">${esc(m.comment || '')}</div>
+          </div>
+        </div>`).join('')}
+      <div class="block"><div class="block-title">💬 陈老师</div>
+        <div class="block-body">${esc(r.comment || '')}</div></div>
+      <button class="btn-primary" style="margin-top:16px" onclick="location.reload()">스테이지 목록으로</button>
+    </div>`;
+}
+const STAR_XP_TABLE = { 1: 50, 2: 120, 3: 250 };
+
+/* ═══ 📖 도감 ═══ */
+async function renderCollection() {
+  const d = await api('?action=collection');
+  renderXp(d.xp);
+  const blocks = d.collection.map(g => {
+    const pct = Math.min(100, Math.round((g.owned / g.goal) * 100));
+    const cells = g.cards.map(c =>
+      `<div class="dex-cell t-${c.tier}" title="${esc(c.pinyin)} · ${esc(c.meaning)}"
+        onclick="__speak('${esc(c.hanzi).replace(/'/g, "\\'")}')">${esc(c.hanzi)}</div>`).join('');
+    // 미획득 칸을 최소 8개는 보여줘 '채우고 싶은' 여백을 남깁니다
+    const empties = Math.max(0, Math.min(16, g.goal - g.owned));
+    const emptyCells = Array.from({ length: empties }, () => `<div class="dex-empty">?</div>`).join('');
+    return `
+      <div class="card fade-in">
+        <div class="dex-head">
+          <div>
+            <p class="card-eyebrow" style="margin:0">LEVEL ${g.level}</p>
+            <b style="font-size:14px">${esc(g.label)}</b>
+          </div>
+          <span class="dex-count">${g.owned} <span style="color:var(--faint);font-size:12px">/ ${g.goal}</span></span>
+        </div>
+        <div class="dex-bar"><i style="width:${pct}%"></i></div>
+        ${g.owned ? `<div class="dex-grid">${cells}${emptyCells}</div>
+          <div class="dex-legend">
+            ${['master','mature','learning','new'].filter(t => g.counts[t]).map(t =>
+              `${tierBadge(t)} <span style="font-size:11px;color:var(--faint)">${g.counts[t]}</span>`).join('')}
+          </div>`
+        : `<p class="hint">아직 이 레벨의 단어가 없습니다. 수업을 마치면 자동으로 채워집니다.</p>`}
+      </div>`;
+  }).join('');
+
+  $('#view').innerHTML = `
+    <div class="card fade-in">
+      <p class="card-eyebrow">词汇图鉴 · 도감</p>
+      <h2>내가 아는 한자</h2>
+      <p class="hint">카드를 탭하면 발음이 들립니다. 등급은 실제 기억 정착도로 결정됩니다 —
+        <b style="color:var(--gold)">숙성</b>은 21일, <b>마스터</b>는 60일 간격을 무실수로 통과한 단어입니다.</p>
+    </div>
+    ${blocks}`;
+}
