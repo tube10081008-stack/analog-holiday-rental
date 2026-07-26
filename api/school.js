@@ -20,6 +20,7 @@ import {
   ensurePredictionsTable, extractPredictions, savePredictions, getPredictionStats,
 } from "./_lib/predictions.js";
 import { AGENT_ROLES } from "./_lib/autonomous-study.js";
+import * as CN from "./_lib/chinese.js";
 
 function json(res, status, payload) {
   res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
@@ -49,6 +50,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    // 🀄 중국어 학당으로 분기 (Hobby 함수 한도 12개 때문에 엔드포인트를 공유합니다)
+    const body0 = req.method === "POST" ? readBody(req) : {};
+    if (query.course === "chinese" || body0.course === "chinese") {
+      return await handleChinese(req, res, query, body0);
+    }
+
     await ensureSchoolTable();
     await ensurePredictionsTable();
 
@@ -181,6 +188,126 @@ async function handleSkip(res, body) {
   const pool = getPool();
   if (pool) await pool.query(`UPDATE founder_lessons SET status='skipped' WHERE id=$1`, [open.id]);
   return json(res, 200, { ok: true, message: "오늘 과제를 건너뛰었습니다. 다음 접속 시 새 과제가 나옵니다." });
+}
+
+/* ═══════════════════════════════════════════════
+   🀄 陈老师 중국어 학당
+   ═══════════════════════════════════════════════ */
+
+async function handleChinese(req, res, query, body) {
+  await CN.ensureChineseTables();
+
+  if (req.method === "GET") {
+    const action = query.action || "today";
+
+    if (action === "today") {
+      const profile = await CN.getProfile();
+      let session = await CN.getOpenSession();
+      let created = false;
+
+      if (!session) {
+        const scene = CN.pickScene(profile?.level || 1, profile?.scene_index || 0);
+        const last = await CN.getLastEvaluation();
+        const priorContext = last?.nextFocus
+          ? `## 이 학생의 지난 수업\n장면: ${last.scene} (${last.score}점)\n지적한 것: ${last.nextFocus}\n→ 오늘 과제는 이 지적이 고쳐졌는지 확인할 수 있게 설계하세요.`
+          : '## 이 학생의 첫 수업입니다. 자신감을 잃지 않을 난이도로 시작하되 대충 넘어가지는 마세요.';
+        const gen = await CN.generateSession(scene, priorContext);
+        session = await CN.createSession(scene, gen);
+        created = true;
+      }
+
+      const due = await CN.getDueCards(12);
+      return json(res, 200, {
+        ok: true, created,
+        profile: { level: profile?.level || 1, sceneIndex: profile?.scene_index || 0 },
+        session: {
+          id: session.id, level: session.level, scene: session.scene, sceneCn: session.scene_cn,
+          dialogue: parseJ(session.dialogue), focus: parseJ(session.focus),
+          task: session.task, speakLine: parseJ(session.speak_line),
+          draft: session.submission || '',
+        },
+        dueCount: due.length,
+        cardStats: await CN.getCardStats(),
+        stats: await CN.getChineseStats(),
+        priorFocus: (await CN.getLastEvaluation())?.nextFocus || null,
+      });
+    }
+
+    if (action === "review") {
+      // 플래시카드 — 정답(뜻)은 클라이언트가 뒤집을 때 보여주므로 함께 내려도 무방합니다
+      return json(res, 200, { ok: true, cards: await CN.getDueCards(12), stats: await CN.getCardStats() });
+    }
+
+    if (action === "history") {
+      return json(res, 200, { ok: true, history: await CN.getChineseHistory(20), stats: await CN.getChineseStats() });
+    }
+
+    return json(res, 400, { ok: false, message: "알 수 없는 action" });
+  }
+
+  if (req.method === "POST") {
+    if (body.action === "setLevel") {
+      await CN.setLevel(body.level);
+      return json(res, 200, { ok: true });
+    }
+
+    if (body.action === "review") {
+      const r = await CN.reviewCard(body.cardId, body.quality);
+      if (!r) return json(res, 404, { ok: false, message: "카드를 찾을 수 없습니다." });
+      return json(res, 200, { ok: true, result: r, stats: await CN.getCardStats() });
+    }
+
+    if (body.action === "submit") {
+      const open = await CN.getOpenSession();
+      if (!open || open.id !== body.sessionId) {
+        return json(res, 409, { ok: false, message: "이미 제출되었거나 유효하지 않은 수업입니다." });
+      }
+      if (!String(body.answer || "").trim()) {
+        return json(res, 400, { ok: false, message: "답안을 입력해 주세요." });
+      }
+
+      const priorEval = await CN.getLastEvaluation();
+      const evaluation = await CN.gradeChinese({
+        session: open, submission: body.answer,
+        speechHeard: body.speechHeard || '', priorEval,
+      });
+
+      await CN.completeSession(open.id, body.answer, body.speechHeard, evaluation);
+      if (evaluation.parseError) {
+        return json(res, 200, { ok: true, parseError: true, message: evaluation.teacherComment });
+      }
+
+      // 오늘 배운 핵심표현 + 교정에서 나온 표현을 SRS 카드로 적립
+      const focus = parseJ(open.focus) || [];
+      const added = await CN.addCards([...focus, ...(evaluation.newCards || [])], open.level);
+
+      return json(res, 200, {
+        ok: true, evaluation, cardsAdded: added,
+        cardStats: await CN.getCardStats(), stats: await CN.getChineseStats(),
+      });
+    }
+
+    if (body.action === "skip") {
+      const { getPool } = await import("./_lib/agent-brain.js");
+      const pool = getPool();
+      if (pool) {
+        await pool.query(`UPDATE chinese_sessions SET status='skipped' WHERE status='open'`);
+        await pool.query(`UPDATE chinese_profile SET scene_index = scene_index + 1 WHERE id=1`);
+      }
+      return json(res, 200, { ok: true });
+    }
+
+    return json(res, 400, { ok: false, message: "알 수 없는 action" });
+  }
+
+  res.setHeader("Allow", "GET, POST");
+  return json(res, 405, { ok: false, message: "GET 또는 POST만 허용됩니다." });
+}
+
+function parseJ(v) {
+  if (v == null) return null;
+  if (typeof v === "object") return v;
+  try { return JSON.parse(v); } catch { return null; }
 }
 
 /** 예측 랭킹 — 대표 vs AI 직원 5명 (브라이어 스코어 기준) */
