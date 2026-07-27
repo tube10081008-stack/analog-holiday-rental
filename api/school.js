@@ -21,6 +21,7 @@ import {
 } from "./_lib/predictions.js";
 import { AGENT_ROLES } from "./_lib/autonomous-study.js";
 import * as CN from "./_lib/chinese.js";
+import * as MA from "./_lib/math.js";
 
 function json(res, status, payload) {
   res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
@@ -54,6 +55,9 @@ export default async function handler(req, res) {
     const body0 = req.method === "POST" ? readBody(req) : {};
     if (query.course === "chinese" || body0.course === "chinese") {
       return await handleChinese(req, res, query, body0);
+    }
+    if (query.course === "math" || body0.course === "math") {
+      return await handleMath(req, res, query, body0);
     }
 
     await ensureSchoolTable();
@@ -356,6 +360,157 @@ function parseJ(v) {
   if (v == null) return null;
   if (typeof v === "object") return v;
   try { return JSON.parse(v); } catch { return null; }
+}
+
+/* ═══════════════════════════════════════════════
+   📐 클로이의 수학 노트
+   ═══════════════════════════════════════════════ */
+
+async function handleMath(req, res, query, body) {
+  await MA.ensureMathTables();
+
+  if (req.method === "GET") {
+    const action = query.action || "today";
+
+    if (action === "today") {
+      const profile = await MA.getProfile();
+      let lesson = await MA.getOpenLesson();
+      let created = false;
+
+      if (!lesson) {
+        const chapter = MA.getChapter(profile?.chapter_index ?? 1);
+        const gaps = await MA.getGaps(5);
+        const priorContext = gaps.length
+          ? `## 이 학습자가 지금까지 흔들렸던 선수 개념\n${gaps.map(g => `- ${g.concept} (${g.times}회)`).join('\n')}\n→ 오늘 설명에서 이 부분이 걸릴 것 같으면 미리 한 줄 짚고 가세요.`
+          : '## 아직 파악된 약점이 없습니다. 설명하면서 관찰해 주세요.';
+        const gen = await MA.generateLesson(chapter, priorContext);
+        lesson = await MA.createLesson(chapter, gen);
+        created = true;
+      }
+
+      const problems = parseJ(lesson.problems) || [];
+      return json(res, 200, {
+        ok: true, created,
+        lesson: {
+          id: lesson.id, chapterNo: lesson.chapter_no, unit: lesson.unit, title: lesson.title,
+          intro: lesson.intro, concept: lesson.concept,
+          // 정답·함정은 내려보내지 않습니다 (문제만 노출)
+          problems: problems.map(p => ({ question: p.question })),
+          problemCount: problems.length,
+          summary: parseJ(lesson.summary) || [],
+          formulas: parseJ(lesson.formulas) || [],
+          step: lesson.step, turns: parseJ(lesson.turns) || [],
+        },
+        stats: await MA.getMathStats(), xp: await MA.getXpState(),
+        gaps: await MA.getGaps(5),
+      });
+    }
+
+    if (action === "map") {
+      const done = await MA.getDoneChapters();
+      const profile = await MA.getProfile();
+      const currentNo = MA.getChapter(profile?.chapter_index ?? 1).no;
+      return json(res, 200, {
+        ok: true, units: MA.UNITS, currentNo,
+        chapters: MA.CHAPTERS.map(c => ({
+          ...c, done: done.includes(c.no), current: c.no === currentNo,
+        })),
+        stats: await MA.getMathStats(), xp: await MA.getXpState(),
+      });
+    }
+
+    if (action === "review") {
+      return json(res, 200, {
+        ok: true, cards: await MA.getDueCards(10),
+        stats: await MA.getMathStats(), xp: await MA.getXpState(),
+      });
+    }
+
+    if (action === "gaps") {
+      return json(res, 200, { ok: true, gaps: await MA.getGaps(20), stats: await MA.getMathStats() });
+    }
+
+    return json(res, 400, { ok: false, message: "알 수 없는 action" });
+  }
+
+  if (req.method === "POST") {
+    if (body.action === "step") {
+      // 읽기 단계(도입·개념·요약) 진행 — LLM 호출 없음
+      await MA.advanceStep(body.lessonId, Number(body.step) || 0, null);
+      return json(res, 200, { ok: true });
+    }
+
+    if (body.action === "answer") {
+      const lesson = await MA.getOpenLesson();
+      if (!lesson || lesson.id !== body.lessonId) {
+        return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
+      }
+      const problems = parseJ(lesson.problems) || [];
+      const idx = Number(body.problemIndex) || 0;
+      const problem = problems[idx];
+      if (!problem) return json(res, 400, { ok: false, message: "문제를 찾을 수 없습니다." });
+
+      const chapter = { unit: lesson.unit, title: lesson.title, no: lesson.chapter_no };
+      const graded = await MA.gradeAnswer({
+        chapter, problem, userAnswer: body.answer, history: parseJ(lesson.turns) || [],
+      });
+      if (graded.parseError) return json(res, 200, { ok: true, parseError: true, message: graded.feedback });
+
+      await MA.advanceStep(lesson.id, Number(body.step) || lesson.step,
+        { role: 'user', content: String(body.answer).slice(0, 800), correct: graded.correct, at: new Date().toISOString() });
+
+      // 중학 선수 개념 구멍이 감지되면 기록해 다음 수업 설계에 반영합니다
+      if (graded.gapConcept) await MA.recordGap(lesson.chapter_no, graded.gapConcept, graded.gapPatch);
+
+      // 🎮 XP는 '맞혔을 때'만. 제출 횟수로는 얻을 수 없습니다
+      const xpGained = graded.correct
+        ? await MA.grantXp(20, `확인문제 정답`, `${lesson.id}_p${idx}`)
+        : 0;
+
+      return json(res, 200, {
+        ok: true, graded, xpGained,
+        answer: problem.answer,          // 채점 후에는 정답을 함께 보여줍니다
+        xp: await MA.getXpState(),
+      });
+    }
+
+    if (body.action === "complete") {
+      const lesson = await MA.getOpenLesson();
+      if (!lesson || lesson.id !== body.lessonId) {
+        return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
+      }
+      const formulas = parseJ(lesson.formulas) || [];
+      const cardsAdded = await MA.addFormulaCards(formulas, lesson.chapter_no);
+      await MA.completeLesson(lesson.id);
+      const xpGained = await MA.grantXp(60, `${lesson.title} 수료`, `${lesson.id}_done`);
+      return json(res, 200, {
+        ok: true, cardsAdded, xpGained,
+        stats: await MA.getMathStats(), xp: await MA.getXpState(),
+      });
+    }
+
+    if (body.action === "review") {
+      const r = await MA.reviewCard(body.cardId, body.quality);
+      if (!r) return json(res, 404, { ok: false, message: "카드를 찾을 수 없습니다." });
+      return json(res, 200, { ok: true, result: r, stats: await MA.getMathStats() });
+    }
+
+    if (body.action === "jump") {
+      // 목차에서 다른 챕터로 이동 (진도 압박이 없는 학습자이므로 자유롭게 허용)
+      const idx = MA.CHAPTERS.findIndex(c => c.no === Number(body.chapterNo));
+      if (idx < 0) return json(res, 400, { ok: false, message: "없는 챕터입니다." });
+      const { getPool } = await import("./_lib/agent-brain.js");
+      const pool = getPool();
+      if (pool) await pool.query(`UPDATE math_lessons SET status='skipped' WHERE status='open'`);
+      await MA.setChapterIndex(idx);
+      return json(res, 200, { ok: true });
+    }
+
+    return json(res, 400, { ok: false, message: "알 수 없는 action" });
+  }
+
+  res.setHeader("Allow", "GET, POST");
+  return json(res, 405, { ok: false, message: "GET 또는 POST만 허용됩니다." });
 }
 
 /** 예측 랭킹 — 대표 vs AI 직원 5명 (브라이어 스코어 기준) */

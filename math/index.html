@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0F1620" />
+  <title>클로이의 수학 노트</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/math/math.css" />
+</head>
+<body>
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <p class="gate-eyebrow">MATH NOTE</p>
+      <h1 class="gate-title">클로이의<br/>수학 노트</h1>
+      <p class="gate-sub">조교이자 스파링 파트너, 클로이와 함께<br/>공통수학 51강</p>
+      <input id="keyInput" type="password" placeholder="관리자 키" autocomplete="current-password" />
+      <button id="enterBtn" class="btn-primary">노트 펼치기</button>
+      <p id="gateError" class="gate-error" hidden></p>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-sub">클로이의 수학 노트</span>
+        <span class="brand-main" id="chapterLabel">—</span>
+      </div>
+      <div class="stat-strip" id="statStrip"></div>
+    </header>
+
+    <div class="xp-bar" id="xpBar" hidden>
+      <div class="xp-lv"><b id="xpLevel">1</b><span>LV</span></div>
+      <div class="xp-track"><i id="xpFill"></i></div>
+      <span class="xp-text" id="xpText">0 / 150</span>
+    </div>
+
+    <nav class="tabs">
+      <button data-tab="today" class="active">오늘 수업</button>
+      <button data-tab="map">목차</button>
+      <button data-tab="review">복습 <span id="dueBadge" class="badge" hidden>0</span></button>
+      <button data-tab="gaps">약한 곳</button>
+    </nav>
+
+    <main id="view" class="view"></main>
+  </div>
+
+  <script type="module" src="/math/math.js"></script>
+</body>
+</html>
