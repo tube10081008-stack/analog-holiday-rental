@@ -2,8 +2,12 @@
  * 클로이의 수학 노트 — 프런트엔드
  *
  * 수학은 한 번에 하나씩 주고받아야 해서 '단계 진행형'입니다.
- *   step 0: 도입(이야기) → 1: 개념(직관·비유) → 2~n: 확인문제 하나씩 → 마지막: 요약표
+ *   도입(이야기) → 준비운동(선수 개념) → 개념(직관·비유)
+ *   → 함께 풀어보기(클로이가 먼저 하나를 끝까지) → 확인문제 하나씩 → 요약표
  * 각 단계에서 다음으로 넘어가야만 그 다음이 보입니다.
+ *
+ * 읽는 단계마다 '여기가 이해 안 돼요' 손잡이가 있습니다. 설명의 적정 분량은 미리 맞힐 수
+ * 없으니, 깊이를 학습자가 직접 요청하게 두고 클로이는 매번 다른 접근으로 다시 설명합니다.
  */
 
 const $ = (s) => document.querySelector(s);
@@ -123,15 +127,45 @@ async function renderToday() {
   drawStep();
 }
 
-/** 총 단계 = 도입 + 개념 + 문제수 + 요약 */
-const totalSteps = () => 2 + (L?.problemCount || 0) + 1;
+/**
+ * 단계 구성을 레슨 내용에서 만듭니다.
+ * 준비운동·함께풀어보기는 나중에 추가된 단계라, 그것들이 없는 옛 레슨도 그대로 열립니다.
+ * (옛 레슨은 도입·개념·문제·요약만 남아 예전과 동일한 순서가 되므로 저장된 step 값이 계속 유효합니다)
+ */
+function buildSteps() {
+  const s = [{ kind: 'intro' }];
+  if (L?.warmup?.length) s.push({ kind: 'warmup' });
+  s.push({ kind: 'concept' });
+  if (L?.walkthrough?.steps?.length) s.push({ kind: 'walkthrough' });
+  for (let i = 0; i < (L?.problemCount || 0); i++) s.push({ kind: 'problem', idx: i });
+  s.push({ kind: 'summary' });
+  return s;
+}
+const totalSteps = () => buildSteps().length;
+
+/** 되돌아갈 개념 단계의 인덱스 (요약에서 '개념 다시 보기'용) */
+const conceptStep = () => Math.max(0, buildSteps().findIndex(s => s.kind === 'concept'));
+
+const LEVEL_BADGE = {
+  easy:    { label: '몸풀기', hint: '방금 함께 푼 것과 거의 같은 형태예요' },
+  trap:    { label: '함정 있음', hint: '많이들 걸리는 지점을 하나 심어뒀어요' },
+  connect: { label: '연결하기', hint: '계산보다 "왜 그런가"를 묻는 문제예요' },
+};
 
 function drawStep() {
-  const n = totalSteps();
-  const dots = stepDots(n, step);
+  const steps = buildSteps();
+  const cur = steps[Math.min(step, steps.length - 1)] || steps[0];
+  const dots = stepDots(steps.length, step);
+  const nextLabel = (i) => {
+    const nx = steps[i + 1];
+    if (!nx) return '다음 →';
+    return { warmup: '준비운동부터 할까요 →', concept: '그래서 개념이 뭔가요 →',
+      walkthrough: '하나 같이 풀어봐요 →', problem: '이해했어요, 문제 주세요 →',
+      summary: '정리하러 가기 →' }[nx.kind] || '다음 →';
+  };
 
-  // 0: 도입
-  if (step === 0) {
+  // 도입
+  if (cur.kind === 'intro') {
     $('#view').innerHTML = `
       <div class="card fade-in">
         ${dots}
@@ -139,47 +173,108 @@ function drawStep() {
         <h2>${esc(L.title)}</h2>
         ${chloeHead('오늘은 이 이야기부터 시작해볼게요')}
         <div class="prose">${md(L.intro)}</div>
-        <button class="btn-primary" style="margin-top:20px" id="next">그래서 어떻게 됐나요 →</button>
+        ${stuckBtn('intro')}
+        <button class="btn-primary" style="margin-top:20px" id="next">${nextLabel(step)}</button>
       </div>`;
-    $('#next').addEventListener('click', () => goStep(1));
+    wireStuck('intro');
+    $('#next').addEventListener('click', () => goStep(step + 1));
     return;
   }
 
-  // 1: 개념
-  if (step === 1) {
+  // 준비운동 — 오늘 필요한 선수 개념을 미리 깔아둡니다
+  if (cur.kind === 'warmup') {
+    $('#view').innerHTML = `
+      <div class="card fade-in">
+        ${dots}
+        <p class="card-eyebrow">준비운동 · 먼저 다져둘 것</p>
+        ${chloeHead('오늘 내용에 이게 깔려 있어야 편해요. 기억 안 나도 정상이에요')}
+        ${L.warmup.map((w, i) => `
+          <div class="warm-item">
+            <div class="warm-head"><span class="warm-no">${i + 1}</span>${esc(w.concept)}</div>
+            <div class="prose">${md(w.refresher)}</div>
+            ${w.why ? `<p class="warm-why">↳ ${esc(w.why)}</p>` : ''}
+          </div>`).join('')}
+        ${stuckBtn('warmup')}
+        <button class="btn-primary" style="margin-top:20px" id="next">${nextLabel(step)}</button>
+        <button class="btn-ghost" id="back">도입 다시 읽기</button>
+      </div>`;
+    wireStuck('warmup');
+    $('#next').addEventListener('click', () => goStep(step + 1));
+    $('#back').addEventListener('click', () => goStep(step - 1));
+    return;
+  }
+
+  // 개념
+  if (cur.kind === 'concept') {
     $('#view').innerHTML = `
       <div class="card fade-in">
         ${dots}
         <p class="card-eyebrow">개념 · 직관으로 먼저</p>
         ${chloeHead('비유로 한번 잡아볼게요')}
         <div class="prose">${md(L.concept)}</div>
-        <button class="btn-primary" style="margin-top:20px" id="next">이해했어요, 문제 주세요 →</button>
-        <button class="btn-ghost" id="back">다시 도입부터 읽기</button>
+        ${stuckBtn('concept')}
+        <button class="btn-primary" style="margin-top:20px" id="next">${nextLabel(step)}</button>
+        <button class="btn-ghost" id="back">앞으로 돌아가기</button>
       </div>`;
-    $('#next').addEventListener('click', () => goStep(2));
-    $('#back').addEventListener('click', () => goStep(0));
+    wireStuck('concept');
+    $('#next').addEventListener('click', () => goStep(step + 1));
+    $('#back').addEventListener('click', () => goStep(Math.max(0, step - 1)));
     return;
   }
 
-  // 2 ~ (2+문제수-1): 확인 문제
-  const pIdx = step - 2;
-  if (pIdx < L.problemCount) {
-    const p = L.problems[pIdx];
+  // 함께 풀어보기 — 문제를 내기 전에 클로이가 먼저 하나를 끝까지 풉니다
+  if (cur.kind === 'walkthrough') {
+    const w = L.walkthrough;
     $('#view').innerHTML = `
       <div class="card fade-in">
         ${dots}
-        <p class="card-eyebrow">확인 문제 ${pIdx + 1} / ${L.problemCount}</p>
-        ${chloeHead('틀려도 괜찮아요. 어디서 헷갈리는지가 더 중요한 정보예요')}
-        <div class="q-box">${md(p.question)}</div>
-        <textarea id="ans" rows="4" placeholder="풀이 과정도 함께 써주면 어디서 갈렸는지 더 정확히 볼 수 있어요"></textarea>
-        <button class="btn-primary" style="margin-top:14px" id="submit">답 제출하기</button>
-        <p class="hint" id="hint"></p>
+        <p class="card-eyebrow">함께 풀어보기 · 제가 먼저 해볼게요</p>
+        ${chloeHead('설명만으론 잘 안 붙어요. 하나 끝까지 같이 가봐요')}
+        <div class="q-box">${md(w.problem || '')}</div>
+        <ol class="wt-steps">
+          ${(w.steps || []).map(s => `
+            <li>
+              <div class="wt-what">${md(s.what || '')}</div>
+              ${s.why ? `<div class="wt-why"><span>왜?</span>${md(s.why)}</div>` : ''}
+            </li>`).join('')}
+        </ol>
+        ${w.recap ? `<div class="wt-recap"><span class="lab">결국 하는 일</span><div class="prose">${md(w.recap)}</div></div>` : ''}
+        ${stuckBtn('walkthrough')}
+        <button class="btn-primary" style="margin-top:20px" id="next">${nextLabel(step)}</button>
+        <button class="btn-ghost" id="back">개념 다시 보기</button>
       </div>`;
-    $('#submit').addEventListener('click', () => submitAnswer(pIdx));
+    wireStuck('walkthrough');
+    $('#next').addEventListener('click', () => goStep(step + 1));
+    $('#back').addEventListener('click', () => goStep(conceptStep()));
     return;
   }
 
-  // 마지막: 요약
+  // 확인 문제
+  if (cur.kind === 'problem') {
+    const pIdx = cur.idx;
+    const p = L.problems[pIdx];
+    const lv = LEVEL_BADGE[p.level] || LEVEL_BADGE.trap;
+    $('#view').innerHTML = `
+      <div class="card fade-in">
+        ${dots}
+        <p class="card-eyebrow">확인 문제 ${pIdx + 1} / ${L.problemCount}
+          <span class="lv-tag lv-${esc(p.level || 'trap')}">${lv.label}</span></p>
+        ${chloeHead(lv.hint)}
+        <div class="q-box">${md(p.question)}</div>
+        <textarea id="ans" rows="4" placeholder="풀이 과정도 함께 써주면 어디서 갈렸는지 더 정확히 볼 수 있어요"></textarea>
+        <button class="btn-primary" style="margin-top:14px" id="submit">답 제출하기</button>
+        ${p.hint ? `<button class="btn-ghost" id="hintBtn">💡 막혔어요, 힌트 주세요</button>
+          <div class="hint-box" id="hintBox" hidden>${md(p.hint)}</div>` : ''}
+        <p class="hint" id="hint"></p>
+      </div>`;
+    $('#submit').addEventListener('click', () => submitAnswer(pIdx));
+    if (p.hint) $('#hintBtn').addEventListener('click', () => {
+      $('#hintBox').hidden = false; $('#hintBtn').remove();
+    });
+    return;
+  }
+
+  // 요약
   const rows = (L.summary || []).map(s => `
     <tr><td>${esc(s.term)}</td><td>${esc(s.meaning)}</td><td>${esc(s.caution || '')}</td></tr>`).join('');
   const forms = (L.formulas || []).map(f => `
@@ -197,12 +292,74 @@ function drawStep() {
         <tbody>${rows}</tbody></table>` : ''}
       ${forms ? `<p class="card-eyebrow" style="margin-top:20px">기억해둘 것</p>${forms}
         <p class="hint">이 항목들은 복습 카드로 저장돼서, 잊을 만할 때 다시 물어봐요.</p>` : ''}
+      ${L.aside ? `<div class="aside-box">
+        <span class="lab">🌱 곁가지 이야기</span>
+        <div class="prose">${md(L.aside)}</div></div>` : ''}
       <button class="btn-primary" style="margin-top:20px" id="done">이 챕터 마치기</button>
       <button class="btn-ghost" id="back">개념 다시 보기</button>
       <p class="hint" id="hint"></p>
     </div>`;
   $('#done').addEventListener('click', completeLesson);
-  $('#back').addEventListener('click', () => goStep(1));
+  $('#back').addEventListener('click', () => goStep(conceptStep()));
+}
+
+/* ═══ 🙋 "여기가 이해 안 돼요" ═══
+   설명의 적정 분량은 미리 맞힐 수 없으니, 깊이를 요청하는 손잡이를 학습자 손에 둡니다.
+   같은 대목을 다시 물으면 클로이가 매번 다른 접근으로 설명합니다. */
+const deepenLog = {};   // section → 이미 시도한 접근 목록
+
+const stuckBtn = (section) => `
+  <button class="btn-stuck" id="stuckBtn">🙋 여기가 이해가 안 돼요</button>
+  <div class="stuck-panel" id="stuckPanel" hidden>
+    <p class="hint" style="margin:0 0 8px">어느 부분이 막혔는지 적어주면 그 지점만 콕 집어 다시 설명해요.
+      비워두고 눌러도 괜찮아요 — 흔히 막히는 곳부터 풀어드릴게요.</p>
+    <textarea id="stuckQ" rows="2" placeholder="예: 왜 차수가 높은 것부터 써야 하는지 모르겠어요"></textarea>
+    <button class="btn-primary" id="stuckGo" style="margin-top:8px">다시 설명해주세요</button>
+  </div>
+  <div id="deepenOut"></div>`;
+
+function wireStuck(section) {
+  const btn = $('#stuckBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    $('#stuckPanel').hidden = false;
+    btn.remove();
+    $('#stuckQ').focus();
+  });
+  // 패널은 stuckBtn 클릭 후에 보이지만, 버튼 위임은 지금 걸어둡니다
+  $('#stuckPanel').addEventListener('click', (e) => {
+    if (e.target.id === 'stuckGo') askDeepen(section);
+  });
+}
+
+async function askDeepen(section) {
+  const go = $('#stuckGo');
+  const question = $('#stuckQ').value.trim();
+  go.disabled = true; go.textContent = '클로이가 다시 생각하는 중…';
+  try {
+    const d = await post({
+      action: 'deepen', lessonId: L.id, section, question,
+      askedBefore: deepenLog[section] || [],
+    });
+    if (d.parseError) { go.disabled = false; go.textContent = '다시 시도'; return; }
+    (deepenLog[section] ||= []).push(d.approach || '(접근 미기재)');
+
+    const box = document.createElement('div');
+    box.className = 'deepen-box fade-in';
+    box.innerHTML = `
+      ${d.approach ? `<span class="lab">🔄 ${esc(d.approach)}</span>` : ''}
+      <div class="prose">${md(d.explanation)}</div>
+      ${d.check ? `<div class="deepen-check"><span>스스로 확인</span>${md(d.check)}</div>` : ''}`;
+    $('#deepenOut').appendChild(box);
+
+    // 또 막힐 수 있으니 손잡이를 다시 둡니다
+    $('#stuckQ').value = '';
+    go.disabled = false; go.textContent = '아직 모르겠어요, 다르게 설명해주세요';
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    go.disabled = false; go.textContent = '다시 시도';
+    console.error(err);
+  }
 }
 
 async function goStep(s) {
