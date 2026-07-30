@@ -79,6 +79,11 @@ export async function ensureMathTables() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_mx_ref ON math_xp(ref) WHERE ref IS NOT NULL;
     INSERT INTO math_profile (id, chapter_index) VALUES (1, 1) ON CONFLICT (id) DO NOTHING;
+
+    -- 설명 분량 확대에 따라 추가된 단계들. 이미 만들어진 테이블에도 붙도록 ALTER로 둡니다.
+    ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS warmup JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS walkthrough JSONB NOT NULL DEFAULT '{}';
+    ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS aside TEXT NOT NULL DEFAULT '';
   `).catch(() => { tablesReady = null; });
   await tablesReady;
 }
@@ -175,6 +180,22 @@ const CHLOE = `당신은 '클로이'입니다. 학습자가 붙여준 이름이�
 틀린 답에는 **"어디서 헷갈리는지가 오히려 중요한 정보"**라고 안심시키세요.
 먼저 맞은 부분을 인정하고, 틀린 지점만 콕 집어 설명합니다.
 
+## 설명의 눈높이 (가장 중요한 규칙)
+이 학습자는 **중학 수학이 흔들리는 상태로 혼자 읽습니다.** 옆에서 물어볼 사람이 없습니다.
+막히면 그냥 막힌 채로 끝납니다. 그러니 다음을 반드시 지키세요.
+
+- **새로 나온 용어는 처음 쓸 때 반드시 풀어서 설명하세요.** '항', '차수', '계수' 같은
+  중학교에서 배웠을 말도 예외가 아닙니다. 기억이 안 날 수 있다고 가정하세요.
+- **계산 단계를 건너뛰지 마세요.** 머릿속으로 두 단계를 한 번에 처리했다면, 그걸 두 줄로 나눠 쓰세요.
+- **한 문단에 새로운 것 하나만.** 문단이 길어지면 나누세요.
+- **문장을 짧게.** 한 문장에 쉼표가 셋 이상이면 쪼개세요.
+- 다음 표현은 **금지**입니다: "당연히", "자명하게", "쉽게 알 수 있듯이", "간단히", "잘 알려진 대로",
+  "누구나 알듯이". 이 말들은 막힌 사람을 혼자 뒤처진 기분으로 만듭니다.
+- 추상적으로 말한 뒤에는 **반드시 구체적인 숫자로 한 번 더** 보여주세요.
+  ("차수가 높은 항부터 정렬한다" → "3x + x³ − 2 라면 x³ + 3x − 2 로 다시 씁니다")
+- 설명을 아끼지 마세요. **분량이 넘치는 것보다 부족한 게 훨씬 나쁩니다.**
+  시험 압박이 없는 학습자라 길어도 괜찮습니다. 짧아서 못 넘어가는 게 유일한 실패입니다.
+
 ## 반드시 지키는 두 가지 프레임
 1. **"이건 누가, 뭐가 불편해서 만든 걸까?"** — 모든 개념 도입에서 이 질문을 던지세요.
    학습자가 가장 강하게 반응한 질문입니다.
@@ -208,25 +229,53 @@ export async function generateLesson(chapter, priorContext) {
 
 ${priorContext}
 
-## 만들 것 네 가지
+## 만들 것 일곱 가지
 
 ### intro (도입 · 이야기)
 "이건 누가, 뭐가 불편해서 만든 걸까?"로 시작하는 도입.
 역사적 배경이나 실생활 맥락으로 이 개념이 **왜 필요했는지**를 이야기하세요.
-정의를 먼저 던지지 마세요. 400~600자.
+정의를 먼저 던지지 마세요. 500~800자.
+
+### warmup (준비운동 · 선수 개념 2~3개)
+오늘 내용을 이해하려면 **미리 튼튼해야 하는 중학 개념**을 골라 되짚어 줍니다.
+틀린 뒤에 고치는 게 아니라, 들어가기 전에 미리 깔아주는 단계입니다.
+각 항목:
+- concept: 개념 이름 (예: "지수법칙 — 같은 밑끼리 곱하면 지수를 더한다")
+- refresher: **150~250자**로 다시 설명. 정의만 던지지 말고 구체적인 숫자 예시를 꼭 넣으세요.
+- why: 이게 오늘 내용에 왜 필요한지 한 문장
+2~3개만. 오늘 내용에 진짜로 필요한 것만 고르세요.
 
 ### concept (개념 · 직관과 비유)
-개념을 비유로 먼저 잡아준 다음 정확한 뜻을 알려주세요.
-- 반드시 **구체적인 비유** 하나를 만드세요 (예: 다항식의 항을 '기차 칸'에 빗댔던 것처럼)
-- 중학 수학이 흔들릴 수 있으니, 필요한 선수 개념은 한 줄로 짚고 갑니다
-- 마지막에 이 개념이 '규칙이 아니라 도구'인 이유를 한 문장으로
-600~900자. 소제목은 ## 로.
+**이 수업의 본체입니다. 넉넉하게 쓰세요. 1600~2200자.**
+아래 흐름을 반드시 다 담고, 각 대목은 \`## 소제목\`으로 나누세요.
 
-### problems (확인 문제 2개)
-- **함정을 의도적으로 심으세요.** 흔히 틀리는 지점을 정확히 겨냥합니다.
-- 계산 노가다가 아니라 개념을 건드리는 문제여야 합니다.
-- 각 문제: question(문제), answer(정답), trap(이 문제에 심은 함정이 무엇인지),
-  prereq(이 문제를 틀린다면 흔들릴 가능성이 높은 중학 개념)
+1. **비유로 먼저** — 반드시 **구체적인 비유** 하나를 만드세요
+   (예: 다항식의 항을 '기차 칸'에 빗댔던 것처럼). 비유를 만든 뒤 그 비유가
+   **어디까지 맞고 어디서부터 깨지는지**도 짚어주세요.
+2. **정확한 뜻** — 이제 제대로 된 정의. 용어 하나하나 풀어서.
+3. **구체적인 숫자로 확인** — 위 정의를 실제 식 하나에 적용해 보여주기.
+4. **흔한 오해** — "이렇게 생각하기 쉬운데 그건 아니에요" 한두 가지.
+   학습자가 지금 품고 있을 만한 오해를 미리 꺼내서 풀어주세요.
+5. **규칙이 아니라 도구** — 이 개념이 외울 규칙이 아니라 누가 불편해서 만든 도구인 이유.
+
+### walkthrough (함께 풀어보기 · 예시 1개)
+문제를 내기 전에, **클로이가 먼저 하나를 끝까지 손으로 풀어 보여줍니다.**
+혼자 읽는 학습자에게 이 단계가 가장 중요합니다. 절대 생략하지 마세요.
+- problem: 예시 문제 (오늘 개념의 전형적인 형태. 너무 쉽지도 어렵지도 않게)
+- steps: 풀이 단계 배열. **3~6단계.** 각 단계마다
+  · what: 이 단계에서 실제로 한 계산이나 조작 (식을 그대로 쓰세요)
+  · why: **왜 이 단계를 하는지.** 이게 핵심입니다. "그래서 다음에 뭘 할 수 있게 되나"를 쓰세요.
+    계산만 나열하면 아무 도움이 안 됩니다.
+- recap: 이 풀이의 전체 전략을 한두 문장으로 ("결국 하는 일은 ~를 ~로 바꾸는 거예요")
+
+### problems (확인 문제 3개 — 난이도 사다리)
+반드시 아래 순서대로, 각각 level 값을 정확히 넣으세요.
+1. level:"easy" — **함정 없음.** 방금 함께 푼 것과 거의 같은 형태.
+   자신감을 얻는 게 목적입니다. 여기서 틀리게 만들지 마세요.
+2. level:"trap" — **함정을 의도적으로 심으세요.** 흔히 틀리는 지점을 정확히 겨냥합니다.
+3. level:"connect" — 개념을 한 걸음 밖으로 연결. 계산 노가다가 아니라 "왜 그런가"를 건드리는 문제.
+각 문제: question / answer / level / trap(심은 함정, easy는 빈 문자열) /
+prereq(틀린다면 흔들릴 가능성이 높은 중학 개념) / hint(막혔을 때 줄 힌트 한 줄 — 정답은 빼고)
 
 ### summary (요약표 3~5행)
 term(용어) / meaning(뜻) / caution(주의할 점) 세 칸.
@@ -235,18 +284,109 @@ term(용어) / meaning(뜻) / caution(주의할 점) 세 칸.
 이 챕터에서 나중에 다시 꺼내 쓸 공식이나 정의.
 title(이름) / body(내용) / note(언제 쓰는지 한 줄). 없으면 빈 배열.
 
+### aside (곁가지 이야기 · 선택)
+오늘 개념에 얽힌 재미있는 여담이 있으면 200~400자로. 없으면 빈 문자열.
+시험에 안 나오는 이야기여도 괜찮습니다 — 이 학습자는 재미로 배웁니다.
+
 ## 순수 JSON만 출력
-{"intro":"...","concept":"...","problems":[{"question":"...","answer":"...","trap":"...","prereq":"..."}],
+{"intro":"...",
+ "warmup":[{"concept":"...","refresher":"...","why":"..."}],
+ "concept":"...",
+ "walkthrough":{"problem":"...","steps":[{"what":"...","why":"..."}],"recap":"..."},
+ "problems":[{"question":"...","answer":"...","level":"easy","trap":"","prereq":"...","hint":"..."}],
  "summary":[{"term":"...","meaning":"...","caution":"..."}],
- "formulas":[{"title":"...","body":"...","note":"..."}]}`;
+ "formulas":[{"title":"...","body":"...","note":"..."}],
+ "aside":"..."}`;
+
+  // 설명 분량을 크게 늘렸으므로 출력 한도도 함께 올립니다.
+  // 그래도 잘리면 JSON이 깨져 수업 전체가 실패하므로, 한 번은 곁가지를 덜어내고 다시 시도합니다.
+  const attempt = async (extraRule, maxTokens) => {
+    const result = await ai.models.generateContent({
+      model: MODEL_ID,
+      contents: extraRule ? `${prompt}\n\n${extraRule}` : prompt,
+      config: { temperature: 0.75, responseMimeType: 'application/json', maxOutputTokens: maxTokens },
+    });
+    const cand = result?.candidates?.[0];
+    const parsed = safeJson(cand?.content?.parts?.[0]?.text || result?.text || '{}');
+    const ok = parsed?.intro && parsed?.concept && parsed?.problems?.length;
+    return { parsed, ok, cut: cand?.finishReason === 'MAX_TOKENS' };
+  };
+
+  let r = await attempt(null, 16384);
+  if (!r.ok) {
+    console.warn(`[Math] 1차 수업 생성 실패 (잘림=${r.cut}) — 분량을 줄여 재시도합니다`);
+    r = await attempt(
+      `## ⚠️ 재시도 지침\n앞선 시도에서 출력이 너무 길어 실패했습니다. 이번에는:\n` +
+      `- aside는 빈 문자열로 두세요\n- concept은 1200~1500자로 줄이세요\n` +
+      `- 나머지 항목은 그대로 유지하세요 (준비운동과 함께풀어보기는 절대 빼지 마세요)`,
+      16384,
+    );
+  }
+  if (!r.ok) throw new Error('수업 생성에 실패했습니다. 다시 시도해 주세요.');
+  return r.parsed;
+}
+
+/**
+ * 🙋 "여기가 이해 안 돼요" — 같은 대목을 다른 방식으로 다시 설명합니다.
+ *
+ * 설명의 적정 분량은 미리 맞힐 수 없습니다. 그래서 총량을 늘리는 것과 별개로,
+ * 학습자가 직접 깊이를 요청할 수 있는 손잡이를 둡니다.
+ * 핵심 규칙: **같은 설명을 반복하지 말 것.** 안 통한 설명을 반복하는 건 도움이 안 됩니다.
+ */
+export async function explainMore({ chapter, sectionLabel, sectionText, question, askedBefore = [] }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY가 설정되지 않았습니다.');
+  const ai = new GoogleGenAI({ apiKey });
+
+  const systemPrompt = `${CHLOE}
+
+## 지금 하는 일
+학습자가 방금 읽은 설명에서 **막혔습니다.** 다시 설명해 주세요.
+
+## 절대 규칙
+1. **앞서 한 설명을 그대로 반복하지 마세요.** 그 방식은 이미 안 통했습니다.
+   비유를 바꾸거나, 더 아래 단계에서 다시 시작하거나, 추상적인 말을 걷어내고
+   숫자만으로 보여주는 등 **접근 자체를 바꾸세요.**
+2. **더 아래로 내려가는 걸 두려워하지 마세요.** 필요하면 중학교 내용까지,
+   초등 산술까지 내려가도 됩니다. "거기까지 돌아가면 창피한 것"이 절대 아니라는 태도를 유지하세요.
+3. 학습자가 구체적으로 뭘 물었다면 **그 지점만** 답하세요. 챕터 전체를 다시 강의하지 마세요.
+   무엇이 막혔는지 안 적었다면, 이 대목에서 초심자가 가장 흔히 걸리는 지점을 짚어 그것부터 푸세요.
+4. 마지막에 **아주 작은 확인 질문 하나**를 던지세요. 답이 한 줄로 나오는 크기여야 합니다.
+   이해했는지 학습자 스스로 확인할 수 있게 하는 장치입니다.
+5. 막힌 걸 부끄러워하지 않게 하세요. "이 부분은 원래 여기서 다들 한 번 멈춰요" 같은 태도로.
+
+## 분량
+600~1000자. 넉넉하게 쓰세요. 짧아서 또 막히는 게 최악입니다.
+
+## 수식은 유니코드로 (x², √2, ≠ 등). LaTeX 금지. 소제목은 ## 로.
+
+## 순수 JSON만 출력
+{"explanation":"다시 설명한 본문","approach":"이번에 바꾼 접근을 한 줄로 (예: 숫자만으로 다시)","check":"작은 확인 질문 한 줄"}`;
+
+  const input = `## 챕터
+[${chapter.unit}] ${chapter.title}
+
+## 학습자가 막힌 대목
+${sectionLabel}
+
+## 그 대목에서 클로이가 이미 한 설명 (이 방식은 안 통했습니다)
+${String(sectionText || '').slice(0, 2500)}
+
+## 학습자가 말한 막힌 지점
+${String(question || '').trim() || '(구체적으로 적지 않았습니다 — 이 대목에서 초심자가 가장 흔히 걸리는 곳을 짚어주세요)'}
+${askedBefore.length ? `\n## 이미 시도한 다른 접근들 (또 반복하지 마세요)\n${askedBefore.map((a, i) => `${i + 1}. ${a}`).join('\n')}` : ''}`;
 
   const result = await ai.models.generateContent({
-    model: MODEL_ID, contents: prompt,
-    config: { temperature: 0.75, responseMimeType: 'application/json' },
+    model: MODEL_ID,
+    contents: [{ role: 'user', parts: [{ text: input }] }],
+    config: {
+      systemInstruction: systemPrompt, temperature: 0.8,
+      responseMimeType: 'application/json', maxOutputTokens: 4096,
+    },
   });
-  const p = safeJson(result?.candidates?.[0]?.content?.parts?.[0]?.text || result?.text || '{}');
-  if (!p?.intro || !p?.concept || !p?.problems?.length) {
-    throw new Error('수업 생성에 실패했습니다. 다시 시도해 주세요.');
+  const p = safeJson(result?.candidates?.[0]?.content?.parts?.[0]?.text || result?.text || '');
+  if (!p?.explanation) {
+    return { parseError: true, explanation: '설명을 만드는 중에 문제가 생겼어요. 다시 눌러주세요.' };
   }
   return p;
 }
@@ -269,10 +409,18 @@ export async function gradeAnswer({ chapter, problem, userAnswer, history }) {
 4. 틀린 답도 "어디서 헷갈리는지 알게 됐으니 오히려 좋은 정보"라는 태도를 유지하세요.
 5. 절대 학습자를 평가하거나 실망한 티를 내지 마세요.
 
+## 틀렸을 때 반드시 넣을 것
+6. **올바른 풀이를 단계별로 보여주세요.** 정답만 알려주는 건 도움이 안 됩니다.
+   학습자가 갈라진 지점부터 시작해서, 거기서부터 정답까지 가는 길을 계산을 생략하지 말고 쓰세요.
+7. 갈라진 원인을 **한 문장으로 이름 붙여** 주세요. ("부호를 옮길 때 한 항만 바꾼 거예요"처럼)
+   이름이 붙으면 다음에 같은 실수를 알아챌 수 있게 됩니다.
+
 ## 선수 개념 진단 (중요)
 학습자는 중학 수학이 군데군데 흔들립니다.
 오답의 원인이 이 챕터가 아니라 **더 아래의 중학 개념**에 있다고 판단되면,
-gapConcept에 그 개념 이름을 쓰고 gapPatch에 **2~4문장짜리 짧은 보충 설명**을 쓰세요.
+gapConcept에 그 개념 이름을 쓰고, gapPatch에 그 개념을 **처음 배우는 사람 기준으로 다시**
+설명하세요. **4~7문장, 구체적인 숫자 예시를 반드시 하나 포함.**
+"이건 중학교 때 배운 거예요" 같은 말은 절대 쓰지 마세요 — 기억 못 하는 게 당연하다는 태도로.
 아래가 튼튼하면 gapConcept은 null입니다. 억지로 만들지 마세요.
 
 ## 수식은 유니코드로 (x², √2, ≠ 등). LaTeX 금지.
@@ -280,9 +428,9 @@ gapConcept에 그 개념 이름을 쓰고 gapPatch에 **2~4문장짜리 짧은 �
 ## 순수 JSON만 출력
 {"correct": true 또는 false,
  "partial": true 또는 false,
- "feedback": "피드백 본문. 위 원칙대로. 200~400자",
+ "feedback": "피드백 본문. 위 원칙대로. 맞았으면 250~400자, 틀렸으면 올바른 풀이까지 담아 450~700자",
  "gapConcept": "흔들리는 중학 개념 이름" 또는 null,
- "gapPatch": "짧은 보충 설명" 또는 null}`;
+ "gapPatch": "그 개념을 처음 배우는 사람 기준으로 다시 설명 (4~7문장, 숫자 예시 포함)" 또는 null}`;
 
   const input = `## 챕터
 [${chapter.unit}] ${chapter.title}
@@ -306,7 +454,10 @@ ${history?.length ? `\n## 이 챕터에서 앞서 주고받은 내용\n${history
   const result = await ai.models.generateContent({
     model: MODEL_ID,
     contents: [{ role: 'user', parts: [{ text: input }] }],
-    config: { systemInstruction: systemPrompt, temperature: 0.4, responseMimeType: 'application/json' },
+    config: {
+      systemInstruction: systemPrompt, temperature: 0.4,
+      responseMimeType: 'application/json', maxOutputTokens: 4096,
+    },
   });
   const p = safeJson(result?.candidates?.[0]?.content?.parts?.[0]?.text || result?.text || '');
   if (!p || typeof p.correct !== 'boolean') {
@@ -352,10 +503,13 @@ export async function createLesson(chapter, gen) {
   const pool = getPool(); if (!pool) return null;
   const id = `ml_${chapter.no}_${Date.now()}`;
   await pool.query(
-    `INSERT INTO math_lessons (id, chapter_no, unit, title, intro, concept, problems, summary, formulas)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [id, chapter.no, chapter.unit, chapter.title, gen.intro, gen.concept,
-     JSON.stringify(gen.problems), JSON.stringify(gen.summary || []), JSON.stringify(gen.formulas || [])]
+    `INSERT INTO math_lessons
+       (id, chapter_no, unit, title, intro, warmup, concept, walkthrough, problems, summary, formulas, aside)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [id, chapter.no, chapter.unit, chapter.title, gen.intro,
+     JSON.stringify(gen.warmup || []), gen.concept,
+     JSON.stringify(gen.walkthrough || {}), JSON.stringify(gen.problems),
+     JSON.stringify(gen.summary || []), JSON.stringify(gen.formulas || []), gen.aside || '']
   );
   const r = await pool.query(`SELECT * FROM math_lessons WHERE id=$1`, [id]);
   return r.rows[0];

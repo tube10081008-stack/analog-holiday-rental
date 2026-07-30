@@ -393,9 +393,13 @@ async function handleMath(req, res, query, body) {
         ok: true, created,
         lesson: {
           id: lesson.id, chapterNo: lesson.chapter_no, unit: lesson.unit, title: lesson.title,
-          intro: lesson.intro, concept: lesson.concept,
-          // 정답·함정은 내려보내지 않습니다 (문제만 노출)
-          problems: problems.map(p => ({ question: p.question })),
+          intro: lesson.intro, concept: lesson.concept, aside: lesson.aside || '',
+          warmup: parseJ(lesson.warmup) || [],
+          walkthrough: parseJ(lesson.walkthrough) || {},
+          // 정답·함정은 내려보내지 않습니다. hint는 학습자가 눌러서 볼 수 있으니 함께 내려보냅니다.
+          problems: problems.map(p => ({
+            question: p.question, level: p.level || 'trap', hint: p.hint || '',
+          })),
           problemCount: problems.length,
           summary: parseJ(lesson.summary) || [],
           formulas: parseJ(lesson.formulas) || [],
@@ -438,6 +442,38 @@ async function handleMath(req, res, query, body) {
       // 읽기 단계(도입·개념·요약) 진행 — LLM 호출 없음
       await MA.advanceStep(body.lessonId, Number(body.step) || 0, null);
       return json(res, 200, { ok: true });
+    }
+
+    // 🙋 "여기가 이해 안 돼요" — 막힌 대목을 다른 방식으로 다시 설명
+    if (body.action === "deepen") {
+      const lesson = await MA.getOpenLesson();
+      if (!lesson || lesson.id !== body.lessonId) {
+        return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
+      }
+      // 어느 대목에서 막혔는지에 따라 다시 설명할 원문을 고릅니다
+      const wt = parseJ(lesson.walkthrough) || {};
+      const SECTIONS = {
+        intro:   { label: '도입 — 이 개념이 왜 필요했나', text: lesson.intro },
+        warmup:  { label: '준비운동 — 선수 개념', text: (parseJ(lesson.warmup) || [])
+                     .map(w => `${w.concept}\n${w.refresher}`).join('\n\n') },
+        concept: { label: '개념 설명', text: lesson.concept },
+        walkthrough: { label: '함께 풀어보기', text: [wt.problem,
+                        ...(wt.steps || []).map(s => `${s.what} — ${s.why}`), wt.recap]
+                        .filter(Boolean).join('\n') },
+      };
+      const sec = SECTIONS[body.section] || SECTIONS.concept;
+
+      const out = await MA.explainMore({
+        chapter: { unit: lesson.unit, title: lesson.title, no: lesson.chapter_no },
+        sectionLabel: sec.label,
+        sectionText: sec.text,
+        question: body.question,
+        askedBefore: Array.isArray(body.askedBefore) ? body.askedBefore.slice(-3) : [],
+      });
+      if (out.parseError) {
+        return json(res, 200, { ok: true, parseError: true, message: out.explanation });
+      }
+      return json(res, 200, { ok: true, ...out });
     }
 
     if (body.action === "answer") {

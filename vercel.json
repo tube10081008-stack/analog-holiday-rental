@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/agent-brain.js": { "maxDuration": 60 },
-    "api/cron.js": { "maxDuration": 60 }
+    "api/cron.js": { "maxDuration": 60 },
+    "api/school.js": { "maxDuration": 60 }
   },
   "crons": [
     {

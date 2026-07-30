@@ -150,6 +150,116 @@ body {
 .gap-box .lab { font-size: 11px; letter-spacing: .1em; color: var(--pink); font-weight: 600; }
 .gap-box p { font-size: 14px; margin-top: 6px; line-height: 1.85; }
 
+/* 준비운동 — 오늘 필요한 선수 개념 */
+.warm-item {
+  border-left: 3px solid var(--blue); background: rgba(74,144,217,.06);
+  border-radius: 0 12px 12px 0; padding: 14px 16px; margin-bottom: 12px;
+}
+.warm-head {
+  display: flex; align-items: flex-start; gap: 9px; margin-bottom: 8px;
+  font-family: var(--serif); font-size: 15.5px; font-weight: 700; color: var(--blue-soft);
+}
+.warm-no {
+  flex: 0 0 auto; margin-top: 4px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--blue); color: #0F1620; font-family: var(--sans);
+  font-size: 11px; font-weight: 700; display: grid; place-items: center;
+}
+.warm-item .prose { font-size: 15px; line-height: 1.95; }
+.warm-why { font-size: 12.5px; color: var(--faint); margin-top: 8px; line-height: 1.7; }
+
+/* 함께 풀어보기 — 각 단계의 '왜'가 본체입니다 */
+.wt-steps { list-style: none; counter-reset: wt; margin: 4px 0 0; }
+.wt-steps li {
+  counter-increment: wt; position: relative;
+  padding: 0 0 18px 34px; border-left: 1px solid var(--line); margin-left: 10px;
+}
+.wt-steps li:last-child { border-left-color: transparent; padding-bottom: 4px; }
+.wt-steps li::before {
+  content: counter(wt); position: absolute; left: -11px; top: 0;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--bg-2); border: 1px solid var(--mint); color: var(--mint);
+  font-size: 11px; font-weight: 700; display: grid; place-items: center;
+}
+.wt-what {
+  font-family: var(--serif); font-size: 16.5px; line-height: 1.85;
+  color: var(--paper); white-space: pre-wrap;
+}
+.wt-why {
+  margin-top: 7px; font-size: 13.5px; line-height: 1.85; color: var(--dim);
+  background: rgba(79,195,161,.07); border-radius: 9px; padding: 9px 12px;
+}
+.wt-why span {
+  display: inline-block; font-size: 10.5px; letter-spacing: .1em; font-weight: 700;
+  color: var(--mint); margin-right: 7px;
+}
+.wt-recap {
+  border: 1px dashed var(--mint); border-radius: 12px;
+  padding: 13px 16px; margin-top: 6px; background: rgba(79,195,161,.05);
+}
+.wt-recap .lab {
+  display: block; font-size: 10.5px; letter-spacing: .14em;
+  color: var(--mint); font-weight: 600; margin-bottom: 5px;
+}
+.wt-recap .prose { font-size: 15px; line-height: 1.9; }
+
+/* 난이도 태그 */
+.lv-tag {
+  display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+  font-size: 10px; letter-spacing: .06em; font-weight: 700; vertical-align: middle;
+}
+.lv-easy    { background: rgba(79,195,161,.16); color: var(--mint); }
+.lv-trap    { background: rgba(232,180,74,.16); color: var(--amber); }
+.lv-connect { background: rgba(121,180,238,.16); color: var(--blue-soft); }
+
+/* 힌트 */
+.hint-box {
+  margin-top: 10px; border-left: 3px solid var(--blue); background: rgba(74,144,217,.07);
+  border-radius: 0 11px 11px 0; padding: 12px 15px;
+  font-family: var(--serif); font-size: 15px; line-height: 1.9; white-space: pre-wrap;
+}
+.hint-box[hidden] { display: none; }
+
+/* 🙋 "여기가 이해 안 돼요" */
+.btn-stuck {
+  display: block; width: 100%; margin-top: 18px; padding: 11px;
+  background: transparent; border: 1px dashed var(--line); border-radius: 11px;
+  color: var(--dim); font-family: var(--sans); font-size: 13px; cursor: pointer;
+  transition: border-color .18s, color .18s;
+}
+.btn-stuck:hover { border-color: var(--blue); color: var(--blue-soft); }
+.stuck-panel {
+  margin-top: 16px; border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 16px; background: var(--bg-2);
+}
+.stuck-panel[hidden] { display: none; }
+.deepen-box {
+  margin-top: 14px; border-left: 3px solid var(--blue-soft);
+  background: rgba(121,180,238,.06); border-radius: 0 12px 12px 0; padding: 15px 17px;
+}
+.deepen-box .lab {
+  display: block; font-size: 10.5px; letter-spacing: .12em;
+  color: var(--blue-soft); font-weight: 600; margin-bottom: 8px;
+}
+.deepen-check {
+  margin-top: 13px; border-top: 1px solid var(--line); padding-top: 11px;
+  font-family: var(--serif); font-size: 15px; line-height: 1.85; white-space: pre-wrap;
+}
+.deepen-check span {
+  display: block; font-family: var(--sans); font-size: 11px; letter-spacing: .12em;
+  color: var(--dim); font-weight: 600; margin-bottom: 5px;
+}
+
+/* 곁가지 이야기 */
+.aside-box {
+  margin-top: 20px; border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 16px; background: rgba(79,195,161,.04);
+}
+.aside-box .lab {
+  display: block; font-size: 11px; letter-spacing: .1em;
+  color: var(--mint); font-weight: 600; margin-bottom: 7px;
+}
+.aside-box .prose { font-size: 14.5px; line-height: 1.9; }
+
 /* 요약표 */
 .sum-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13.5px; }
 .sum-table th {
