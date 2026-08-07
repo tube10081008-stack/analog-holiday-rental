@@ -14,11 +14,10 @@
  * 설명은 교재를 옮기지 않고 클로이의 방식으로 새로 합니다.
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { generateJson } from "./llm.js";   // Fugu ↔ Gemini 전환·폴백은 여기서 처리합니다
 import { getPool } from "./agent-brain.js";
 import { sm2 } from "./chinese.js";   // 간격 반복 엔진은 동일한 것을 재사용합니다
 
-const MODEL_ID = process.env.GEMINI_MODEL_ID || "gemini-3.5-flash";
 let tablesReady;
 
 export async function ensureMathTables() {
@@ -207,6 +206,40 @@ const CHLOE = `당신은 '클로이'입니다. 학습자가 붙여준 이름이�
 설명은 책을 옮기지 말고 당신의 방식으로 새로 하되,
 그 책이 가진 '개념의 유래를 이야기로 풀어내는 매력'은 살려 주세요.
 
+## 판서 — 줄을 맞춰야 하는 계산은 말로 하지 마세요 (매우 중요)
+세로로 자리를 맞춰 배치해야 이해되는 계산이 있습니다.
+세로 나눗셈, 조립제법, 연립방정식 소거, 항 정렬, 인수분해 과정 같은 것들입니다.
+
+이런 걸 **문장으로 설명하면 전달되지 않습니다.**
+"이걸 원래 식 밑에 줄을 맞춰 쓰고 빼줍니다" — 이 문장은 공간 정보를 말로 억지 번역한 것이고,
+학습자는 결국 종이에 직접 그려봐야 이해합니다. 그럴 거면 처음부터 그려서 보여주세요.
+
+반드시 아래 형식의 **판서 블록**으로 그리세요. 고정폭 글꼴로 렌더되므로 공백이 그대로 보존됩니다.
+
+\`\`\`판서
+          x  +  2
+        ┌──────────────
+  x + 1 │ x² + 3x + 5
+          x² +  x          ← x·(x+1)
+          ──────────
+               2x + 5
+               2x + 2      ← 2·(x+1)
+               ──────
+                    3      ← 나머지
+\`\`\`
+
+판서 규칙:
+- **공백(스페이스)으로만 자리를 맞추세요. 탭 금지.**
+- **같은 차수의 항은 반드시 세로로 정렬하세요.** 이게 판서의 핵심입니다.
+  x²은 x²끼리, x는 x끼리, 상수는 상수끼리 같은 열에 오게 하세요.
+- 오른쪽에 \`←\` 로 그 줄이 무엇인지 달아주세요. 이게 있으면 혼자서도 따라갑니다.
+  단, **주석은 12자 이내로 아주 짧게.** 휴대폰 화면이 좁아서 길면 잘려 나갑니다.
+  \`← x·(x+1)\` 은 좋고, \`← 몫의 첫 항에 나누는 식을 곱한 것\` 은 너무 깁니다.
+- **판서 한 줄은 40자를 넘기지 마세요.** 넘치면 휴대폰에서 가로로 밀어야 보입니다.
+- 괘선은 \`┌ │ ─ └ ┘\` 와 \`──────\` 를 씁니다.
+- 판서를 넣은 뒤에는 그 판서를 **말로 다시 읊지 마세요.** 그림이 이미 말했습니다.
+  대신 "왜 이렇게 놓는지"만 한두 문장 덧붙이세요.
+
 ## 수식 표기 규칙 (반드시 지킬 것)
 LaTeX를 쓰지 마세요. 유니코드로 씁니다.
 - 지수: x², x³, xⁿ  (x^2 금지)
@@ -217,13 +250,7 @@ LaTeX를 쓰지 마세요. 유니코드로 씁니다.
 
 /** 한 챕터의 수업 전체를 생성합니다 (도입 → 개념 → 확인문제 → 요약) */
 export async function generateLesson(chapter, priorContext) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY가 설정되지 않았습니다.');
-  const ai = new GoogleGenAI({ apiKey });
-
-  const prompt = `${CHLOE}
-
-## 오늘 다룰 챕터
+  const prompt = `## 오늘 다룰 챕터
 [${chapter.unit}] ${String(chapter.no).padStart(2, '0')} ${chapter.title}
 실마리: ${chapter.hook}
 
@@ -254,6 +281,7 @@ ${priorContext}
    **어디까지 맞고 어디서부터 깨지는지**도 짚어주세요.
 2. **정확한 뜻** — 이제 제대로 된 정의. 용어 하나하나 풀어서.
 3. **구체적인 숫자로 확인** — 위 정의를 실제 식 하나에 적용해 보여주기.
+   줄을 맞춰야 하는 계산이라면 **반드시 판서 블록으로** 그리세요. 말로 풀어쓰지 마세요.
 4. **흔한 오해** — "이렇게 생각하기 쉬운데 그건 아니에요" 한두 가지.
    학습자가 지금 품고 있을 만한 오해를 미리 꺼내서 풀어주세요.
 5. **규칙이 아니라 도구** — 이 개념이 외울 규칙이 아니라 누가 불편해서 만든 도구인 이유.
@@ -266,6 +294,12 @@ ${priorContext}
   · what: 이 단계에서 실제로 한 계산이나 조작 (식을 그대로 쓰세요)
   · why: **왜 이 단계를 하는지.** 이게 핵심입니다. "그래서 다음에 뭘 할 수 있게 되나"를 쓰세요.
     계산만 나열하면 아무 도움이 안 됩니다.
+  · board: **그 단계까지 진행된 판서의 누적 상태.** (자리 맞춤이 필요한 주제일 때만)
+    ⚠️ 중요 — 매 단계 처음부터 다시 그리되, **그 단계까지 쓴 줄만** 그리세요.
+    학습자가 종이에 한 줄씩 써 내려가는 것과 같은 순서로 판서가 자라야 합니다.
+    앞 단계의 판서에 이번 줄이 더해진 모습이어야 하고, 앞서 그린 줄의 자리가 흔들리면 안 됩니다.
+    판서 블록 표시(\`\`\`판서)는 붙이지 말고 **내용만** 넣으세요. 자리 맞춤 규칙은 그대로 지킵니다.
+    자리 맞춤이 필요 없는 주제(예: 명제, 집합의 뜻)라면 빈 문자열로 두세요.
 - recap: 이 풀이의 전체 전략을 한두 문장으로 ("결국 하는 일은 ~를 ~로 바꾸는 거예요")
 
 ### problems (확인 문제 3개 — 난이도 사다리)
@@ -292,38 +326,35 @@ title(이름) / body(내용) / note(언제 쓰는지 한 줄). 없으면 빈 배
 {"intro":"...",
  "warmup":[{"concept":"...","refresher":"...","why":"..."}],
  "concept":"...",
- "walkthrough":{"problem":"...","steps":[{"what":"...","why":"..."}],"recap":"..."},
+ "walkthrough":{"problem":"...","steps":[{"what":"...","why":"...","board":"..."}],"recap":"..."},
  "problems":[{"question":"...","answer":"...","level":"easy","trap":"","prereq":"...","hint":"..."}],
  "summary":[{"term":"...","meaning":"...","caution":"..."}],
  "formulas":[{"title":"...","body":"...","note":"..."}],
  "aside":"..."}`;
 
-  // 설명 분량을 크게 늘렸으므로 출력 한도도 함께 올립니다.
-  // 그래도 잘리면 JSON이 깨져 수업 전체가 실패하므로, 한 번은 곁가지를 덜어내고 다시 시도합니다.
-  const attempt = async (extraRule, maxTokens) => {
-    const result = await ai.models.generateContent({
-      model: MODEL_ID,
-      contents: extraRule ? `${prompt}\n\n${extraRule}` : prompt,
-      config: { temperature: 0.75, responseMimeType: 'application/json', maxOutputTokens: maxTokens },
-    });
-    const cand = result?.candidates?.[0];
-    const parsed = safeJson(cand?.content?.parts?.[0]?.text || result?.text || '{}');
-    const ok = parsed?.intro && parsed?.concept && parsed?.problems?.length;
-    return { parsed, ok, cut: cand?.finishReason === 'MAX_TOKENS' };
-  };
+  // 설명 분량이 커서 출력 한도도 함께 올립니다. 그래도 잘리면 JSON이 깨져 수업 전체가
+  // 실패하므로, 한 번은 곁가지를 덜어내고 다시 시도합니다.
+  // (프로바이더 실패·타임아웃 폴백은 generateJson 안에서 처리됩니다)
+  const valid = (d) => !!(d?.intro && d?.concept && d?.problems?.length);
+  const ask = (extraRule, budgetMs) => generateJson({
+    system: CHLOE,
+    user: extraRule ? `${prompt}\n\n${extraRule}` : prompt,
+    temperature: 0.75, maxTokens: 16384, budgetMs, validate: valid,
+    label: `lesson:${chapter.no}`,
+  });
 
-  let r = await attempt(null, 16384);
-  if (!r.ok) {
-    console.warn(`[Math] 1차 수업 생성 실패 (잘림=${r.cut}) — 분량을 줄여 재시도합니다`);
-    r = await attempt(
+  let r = await ask(null, 40000);
+  if (!r.data) {
+    console.warn('[Math] 1차 수업 생성 실패 — 분량을 줄여 재시도합니다');
+    r = await ask(
       `## ⚠️ 재시도 지침\n앞선 시도에서 출력이 너무 길어 실패했습니다. 이번에는:\n` +
       `- aside는 빈 문자열로 두세요\n- concept은 1200~1500자로 줄이세요\n` +
       `- 나머지 항목은 그대로 유지하세요 (준비운동과 함께풀어보기는 절대 빼지 마세요)`,
-      16384,
+      14000,
     );
   }
-  if (!r.ok) throw new Error('수업 생성에 실패했습니다. 다시 시도해 주세요.');
-  return r.parsed;
+  if (!r.data) throw new Error('수업 생성에 실패했습니다. 다시 시도해 주세요.');
+  return r.data;
 }
 
 /**
@@ -334,10 +365,6 @@ title(이름) / body(내용) / note(언제 쓰는지 한 줄). 없으면 빈 배
  * 핵심 규칙: **같은 설명을 반복하지 말 것.** 안 통한 설명을 반복하는 건 도움이 안 됩니다.
  */
 export async function explainMore({ chapter, sectionLabel, sectionText, question, askedBefore = [] }) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY가 설정되지 않았습니다.');
-  const ai = new GoogleGenAI({ apiKey });
-
   const systemPrompt = `${CHLOE}
 
 ## 지금 하는 일
@@ -354,6 +381,8 @@ export async function explainMore({ chapter, sectionLabel, sectionText, question
 4. 마지막에 **아주 작은 확인 질문 하나**를 던지세요. 답이 한 줄로 나오는 크기여야 합니다.
    이해했는지 학습자 스스로 확인할 수 있게 하는 장치입니다.
 5. 막힌 걸 부끄러워하지 않게 하세요. "이 부분은 원래 여기서 다들 한 번 멈춰요" 같은 태도로.
+6. **막힌 대목이 자리 맞춤이 필요한 계산이라면, 접근을 바꾸는 가장 좋은 방법은 판서입니다.**
+   말로 다시 설명하는 대신 판서 블록으로 그려서 보여주세요.
 
 ## 분량
 600~1000자. 넉넉하게 쓰세요. 짧아서 또 막히는 게 최악입니다.
@@ -376,27 +405,20 @@ ${String(sectionText || '').slice(0, 2500)}
 ${String(question || '').trim() || '(구체적으로 적지 않았습니다 — 이 대목에서 초심자가 가장 흔히 걸리는 곳을 짚어주세요)'}
 ${askedBefore.length ? `\n## 이미 시도한 다른 접근들 (또 반복하지 마세요)\n${askedBefore.map((a, i) => `${i + 1}. ${a}`).join('\n')}` : ''}`;
 
-  const result = await ai.models.generateContent({
-    model: MODEL_ID,
-    contents: [{ role: 'user', parts: [{ text: input }] }],
-    config: {
-      systemInstruction: systemPrompt, temperature: 0.8,
-      responseMimeType: 'application/json', maxOutputTokens: 4096,
-    },
+  const { data } = await generateJson({
+    system: systemPrompt, user: input,
+    temperature: 0.8, maxTokens: 4096, budgetMs: 50000,
+    validate: (d) => !!d?.explanation,
+    label: `deepen:${chapter.no}`,
   });
-  const p = safeJson(result?.candidates?.[0]?.content?.parts?.[0]?.text || result?.text || '');
-  if (!p?.explanation) {
+  if (!data) {
     return { parseError: true, explanation: '설명을 만드는 중에 문제가 생겼어요. 다시 눌러주세요.' };
   }
-  return p;
+  return data;
 }
 
 /** 확인 문제 하나에 대한 답을 채점 — 정오보다 '어디서 헷갈렸는지'가 핵심 */
 export async function gradeAnswer({ chapter, problem, userAnswer, history }) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY가 설정되지 않았습니다.');
-  const ai = new GoogleGenAI({ apiKey });
-
   const systemPrompt = `${CHLOE}
 
 ## 지금 하는 일
@@ -412,6 +434,7 @@ export async function gradeAnswer({ chapter, problem, userAnswer, history }) {
 ## 틀렸을 때 반드시 넣을 것
 6. **올바른 풀이를 단계별로 보여주세요.** 정답만 알려주는 건 도움이 안 됩니다.
    학습자가 갈라진 지점부터 시작해서, 거기서부터 정답까지 가는 길을 계산을 생략하지 말고 쓰세요.
+   자리 맞춤이 필요한 계산이면 **판서 블록으로 그려서** 보여주세요. 말로 풀어쓰지 마세요.
 7. 갈라진 원인을 **한 문장으로 이름 붙여** 주세요. ("부호를 옮길 때 한 항만 바꾼 거예요"처럼)
    이름이 붙으면 다음에 같은 실수를 알아챌 수 있게 됩니다.
 
@@ -451,27 +474,16 @@ ${problem.prereq || '(미지정)'}
 ${String(userAnswer).slice(0, 1500)}
 ${history?.length ? `\n## 이 챕터에서 앞서 주고받은 내용\n${history.slice(-4).map(t => `${t.role === 'user' ? '학습자' : '클로이'}: ${String(t.content).slice(0, 200)}`).join('\n')}` : ''}`;
 
-  const result = await ai.models.generateContent({
-    model: MODEL_ID,
-    contents: [{ role: 'user', parts: [{ text: input }] }],
-    config: {
-      systemInstruction: systemPrompt, temperature: 0.4,
-      responseMimeType: 'application/json', maxOutputTokens: 4096,
-    },
+  const { data } = await generateJson({
+    system: systemPrompt, user: input,
+    temperature: 0.4, maxTokens: 4096, budgetMs: 50000,
+    validate: (d) => typeof d?.correct === 'boolean',
+    label: `grade:${chapter.no}`,
   });
-  const p = safeJson(result?.candidates?.[0]?.content?.parts?.[0]?.text || result?.text || '');
-  if (!p || typeof p.correct !== 'boolean') {
+  if (!data) {
     return { parseError: true, feedback: '채점 중 문제가 생겼어요. 다시 제출해 주세요.' };
   }
-  return p;
-}
-
-function safeJson(text) {
-  try { return JSON.parse(text); } catch { /* next */ }
-  const m = String(text).match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  try { return JSON.parse(m[0]); } catch { /* next */ }
-  try { return JSON.parse(m[0].replace(/[\r\n\t]+/g, ' ')); } catch { return null; }
+  return data;
 }
 
 // ═══════════════════════════════════════════════════
