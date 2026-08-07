@@ -150,6 +150,49 @@ body {
 .gap-box .lab { font-size: 11px; letter-spacing: .1em; color: var(--pink); font-weight: 600; }
 .gap-box p { font-size: 14px; margin-top: 6px; line-height: 1.85; }
 
+/* 판서 — 자리 맞춤이 곧 내용입니다. 고정폭 + 공백 보존이 절대 조건.
+   좁은 화면에서 줄바꿈이 일어나면 정렬이 무너지므로, 줄바꿈 대신 가로 스크롤을 둡니다. */
+.board-wrap {
+  margin: 12px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(rgba(39,55,74,.45) 1px, transparent 1px) 0 0 / 100% 24px,
+    linear-gradient(90deg, rgba(39,55,74,.45) 1px, transparent 1px) 0 0 / 24px 100%,
+    #131C27;
+}
+.board {
+  display: inline-block; min-width: 100%;
+  margin: 0; padding: 16px 18px;
+  font-family: 'DejaVu Sans Mono', 'Menlo', 'Consolas', ui-monospace, monospace;
+  font-size: 14px; line-height: 1.75;
+  color: var(--paper);
+  white-space: pre;           /* pre-wrap 금지 — 줄바꿈되면 정렬이 깨집니다 */
+  tab-size: 4;
+}
+.board-wrap::-webkit-scrollbar { height: 6px; }
+.board-wrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+/* 판서가 화면보다 넓을 때만 오른쪽에 페이드와 안내를 답니다.
+   ← 로 단 주석이 잘려 있는 걸 모르고 지나치는 게 가장 아깝습니다. */
+.board-wrap.scrollable { position: relative; }
+.board-wrap.scrollable::after {
+  content: '옆으로 밀어보세요 →';
+  position: sticky; right: 0; float: right; bottom: 0;
+  display: block; margin: -22px 0 0; padding: 2px 8px;
+  font-family: var(--sans); font-size: 10px; letter-spacing: .04em;
+  color: var(--blue-soft); background: rgba(19,28,39,.92);
+  border: 1px solid var(--line); border-radius: 999px;
+  pointer-events: none; transition: opacity .2s;
+}
+.board-wrap.scrollable.at-end::after { opacity: 0; }
+
+@media (max-width: 420px) {
+  .board { font-size: 12.5px; padding: 14px 15px; }
+}
+
 /* 준비운동 — 오늘 필요한 선수 개념 */
 .warm-item {
   border-left: 3px solid var(--blue); background: rgba(74,144,217,.06);

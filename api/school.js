@@ -434,6 +434,12 @@ async function handleMath(req, res, query, body) {
       return json(res, 200, { ok: true, gaps: await MA.getGaps(20), stats: await MA.getMathStats() });
     }
 
+    // 배포 후 어느 모델로 돌고 있는지 확인용 (키 값 자체는 노출하지 않습니다)
+    if (action === "provider") {
+      const { providerInfo } = await import("./_lib/llm.js");
+      return json(res, 200, { ok: true, ...providerInfo() });
+    }
+
     return json(res, 400, { ok: false, message: "알 수 없는 action" });
   }
 
