@@ -628,6 +628,7 @@ async function handleGerman(req, res, query, body) {
           // 정답·함정은 내려보내지 않습니다. 힌트는 눌러서 볼 수 있으니 함께 보냅니다.
           problems: problems.map(p => ({
             question: p.question, level: p.level || 'trap', hint: p.hint || '',
+            gloss: Array.isArray(p.gloss) ? p.gloss : [],
           })),
           problemCount: problems.length,
           summary: parseJ(lesson.summary) || [],

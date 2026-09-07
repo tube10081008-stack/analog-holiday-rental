@@ -638,3 +638,27 @@ body {
 .tabs { overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
 .tabs button { flex: 0 0 auto; white-space: nowrap; }
+
+/* 📖 낱말 각주 — 사전 없이 문제를 풀 수 있게 */
+.gloss {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: -6px 0 14px; padding: 11px 13px;
+  border-radius: 11px; border: 1px solid var(--line); background: var(--bg-2);
+}
+.gloss-lab {
+  flex: 0 0 auto; font-size: 10px; letter-spacing: .12em; font-weight: 600;
+  color: var(--faint); margin-right: 2px;
+}
+.gloss-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  background: transparent; border: 1px solid var(--line);
+  transition: border-color .15s, background .15s;
+}
+.gloss-chip:hover, .gloss-chip:active {
+  border-color: var(--blue); background: color-mix(in srgb, var(--blue) 9%, transparent);
+}
+.gloss-chip b {
+  font-family: var(--serif); font-size: 14.5px; font-weight: 700; color: var(--paper);
+}
+.gloss-chip span { font-size: 11.5px; color: var(--dim); }
