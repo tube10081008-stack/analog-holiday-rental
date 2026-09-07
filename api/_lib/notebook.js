@@ -31,31 +31,44 @@ export const TASK_KINDS = {
 export async function ensureNotebookTables() {
   const pool = getPool();
   if (!pool || tablesReady) return;
-  tablesReady = pool.query(`
-    CREATE TABLE IF NOT EXISTS notebook_tasks (
-      id TEXT PRIMARY KEY,
-      course TEXT NOT NULL,
-      chapter_no INTEGER NOT NULL,
-      sec TEXT NOT NULL DEFAULT '',
-      title TEXT NOT NULL DEFAULT '',
-      kind TEXT NOT NULL DEFAULT 'table',
-      spec TEXT NOT NULL,
-      target INTEGER NOT NULL DEFAULT 1,
-      done INTEGER NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'open',
-      photo_url TEXT,
-      issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      done_at TIMESTAMPTZ
-    );
-    CREATE INDEX IF NOT EXISTS idx_nb_open ON notebook_tasks(course, status, issued_at);
-    CREATE INDEX IF NOT EXISTS idx_nb_ch ON notebook_tasks(course, chapter_no);
-
-    -- 👥 사용자 분리. 기존 과제는 전부 주인(id=1)의 것입니다
-    ALTER TABLE notebook_tasks ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
-    CREATE INDEX IF NOT EXISTS idx_nb_user ON notebook_tasks(user_id, course, status);
-  `).catch(() => { tablesReady = null; });
+  tablesReady = (async () => {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS notebook_tasks (
+        id TEXT PRIMARY KEY,
+        course TEXT NOT NULL,
+        chapter_no INTEGER NOT NULL,
+        sec TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL DEFAULT '',
+        kind TEXT NOT NULL DEFAULT 'table',
+        spec TEXT NOT NULL,
+        target INTEGER NOT NULL DEFAULT 1,
+        done INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'open',
+        photo_url TEXT,
+        issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        done_at TIMESTAMPTZ
+      );
+    `);
+    // 한 문장씩 따로 — 하나가 실패해도 나머지가 멈추지 않게 합니다
+    for (const sql of NOTEBOOK_MIGRATIONS) {
+      await pool.query(sql).catch((e) =>
+        console.warn('[Notebook] 마이그레이션 건너뜀:', sql.trim().slice(0, 70), '—', e.message));
+    }
+  })().catch((e) => {
+    console.error('[Notebook] 스키마 준비 실패:', e.message);
+    tablesReady = null;
+  });
   await tablesReady;
 }
+
+/** 칼럼을 먼저 붙이고, 그 칼럼을 쓰는 인덱스를 뒤에 만듭니다 */
+const NOTEBOOK_MIGRATIONS = [
+  // 👥 사용자 분리. 기존 과제는 전부 주인(id=1)의 것입니다
+  `ALTER TABLE notebook_tasks ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+  `CREATE INDEX IF NOT EXISTS idx_nb_open ON notebook_tasks(course, status, issued_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_nb_ch ON notebook_tasks(course, chapter_no)`,
+  `CREATE INDEX IF NOT EXISTS idx_nb_user ON notebook_tasks(user_id, course, status)`,
+];
 
 /**
  * 결정적 ID — 같은 장의 같은 과제를 두 번 발행해도 늘어나지 않습니다.
