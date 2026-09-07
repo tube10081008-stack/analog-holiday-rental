@@ -22,6 +22,8 @@ import {
 import { AGENT_ROLES } from "./_lib/autonomous-study.js";
 import * as CN from "./_lib/chinese.js";
 import * as MA from "./_lib/math.js";
+import { resolveUser, invite, listUsers, partnersOf, removeUser, rotateKey,
+         ensureUserTables } from "./_lib/users.js";
 
 function json(res, status, payload) {
   res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
@@ -46,21 +48,37 @@ export default async function handler(req, res) {
 
   const key = req.headers?.["x-admin-key"] || readBody(req).key || "";
   const stored = getAdminKey();
-  if (!stored || key !== stored) {
+
+  // 👥 키로 사람을 가립니다. 대표는 기존 관리자 키 그대로, 친구는 초대 키로 들어옵니다.
+  // 독일어 과정만 여러 사람을 받고, 나머지는 지금까지대로 대표 전용입니다.
+  let me = null;
+  try { me = await resolveUser(key); } catch { /* DB 미연결 시 아래 폴백 */ }
+  const isOwnerKey = !!stored && key === stored;
+  if (!me && !isOwnerKey) {
     return json(res, 401, { ok: false, message: "관리자 인증이 필요합니다." });
   }
+  // DB가 없거나 아직 계정이 안 만들어졌으면 대표로 봅니다 (기존 동작 유지)
+  if (!me) me = { id: 1, name: process.env.OWNER_NAME || "나", is_owner: true,
+                  courses: ["german", "math", "chinese"] };
 
   try {
     // 🀄 중국어 학당으로 분기 (Hobby 함수 한도 12개 때문에 엔드포인트를 공유합니다)
     const body0 = req.method === "POST" ? readBody(req) : {};
+    if (query.course === "german" || body0.course === "german") {
+      return await handleGerman(req, res, query, body0, me);
+    }
+
+    // 아래 과정들은 대표 전용입니다. 친구 계정으로는 들어올 수 없습니다.
+    if (!me.is_owner) {
+      return json(res, 403, {
+        ok: false, message: "이 과정은 아직 함께하기가 열려 있지 않아요. 독일어 노트로 가주세요.",
+      });
+    }
     if (query.course === "chinese" || body0.course === "chinese") {
       return await handleChinese(req, res, query, body0);
     }
     if (query.course === "math" || body0.course === "math") {
       return await handleMath(req, res, query, body0);
-    }
-    if (query.course === "german" || body0.course === "german") {
-      return await handleGerman(req, res, query, body0);
     }
 
     await ensureSchoolTable();
@@ -583,49 +601,68 @@ async function handleLeaderboard(res) {
   return json(res, 200, { ok: true, ranked, unranked });
 }
 
-/** 레슨 행에서 장 메타(번호·절번호·제목)를 꺼냅니다 */
-function chapterMetaOf(GE, lesson) {
-  return GE.CHAPTERS.find(c => c.no === lesson.chapter_no)
-    || { no: lesson.chapter_no, sec: String(lesson.chapter_no), title: lesson.title };
-}
-
 /* ═══════════════════════════════════════════════════
    🇩🇪 레나의 독일어 노트 (?course=german)
    Hobby 함수 한도 12개 때문에 이 엔드포인트를 공유합니다.
    ═══════════════════════════════════════════════════ */
-async function handleGerman(req, res, query, body) {
+async function handleGerman(req, res, query, body, me) {
   const GE = await import("./_lib/german.js");
   const NB = await import("./_lib/notebook.js");
+  const TG = await import("./_lib/together.js");
   await GE.ensureGermanTables();
   await NB.ensureNotebookTables();
+  await TG.ensureTogetherTables();
+  await ensureUserTables();   // peer 조회가 study_users를 조인하므로 먼저 보장합니다
+  const uid = me.id;
   const action = query.action || body.action || "today";
+
+  const chapterMeta = (lesson) => GE.CHAPTERS.find(c => c.no === lesson.chapter_no)
+    || { no: lesson.chapter_no, sec: String(lesson.chapter_no), title: lesson.title, de: lesson.de_title, unit: lesson.unit };
 
   if (req.method === "GET") {
     if (action === "today") {
-      let lesson = await GE.getOpenLesson();
-      let created = false;
+      let lesson = await GE.getOpenLesson(uid);
+      let created = false, shared = false;
       if (!lesson) {
-        const profile = await GE.getProfile();
+        const profile = await GE.getProfile(uid);
         const chapter = GE.getChapter(profile?.chapter_index ?? 0);
-        const gaps = await GE.getGaps(6);
-        const priorContext = gaps.length
-          ? `## 지금까지 관찰된 약한 곳 (설명에 자연스럽게 녹여 주세요)\n${
-              gaps.map(g => `- ${g.concept} (${g.times}회)`).join('\n')}`
-          : '## 아직 파악된 약점이 없습니다. 설명하면서 관찰해 주세요.';
-        const gen = await GE.generateLesson(chapter, priorContext);
-        lesson = await GE.createLesson(chapter, gen);
-        created = true;
+
+        // 🤝 같은 장을 이미 누가 배웠으면 그 텍스트를 그대로 씁니다.
+        // 둘이 같은 글을 읽어야 답 비교가 의미 있고, 생성 비용도 아낍니다.
+        const existing = await GE.findSharedLesson(chapter.no);
+        if (existing) {
+          lesson = await GE.createLesson(uid, chapter, {
+            intro: existing.intro, concept: existing.concept, aside: existing.aside,
+            warmup: parseJ(existing.warmup) || [],
+            walkthrough: parseJ(existing.walkthrough) || {},
+            problems: parseJ(existing.problems) || [],
+            summary: parseJ(existing.summary) || [],
+            cards: parseJ(existing.cards) || [],
+            notebook: parseJ(existing.notebook) || [],
+          });
+          created = true; shared = true;
+        } else {
+          const gaps = await GE.getGaps(uid, 6);
+          const priorContext = gaps.length
+            ? `## 지금까지 관찰된 약한 곳 (설명에 자연스럽게 녹여 주세요)\n${
+                gaps.map(g => `- ${g.concept} (${g.times}회)`).join('\n')}`
+            : '## 아직 파악된 약점이 없습니다. 설명하면서 관찰해 주세요.';
+          const gen = await GE.generateLesson(chapter, priorContext);
+          lesson = await GE.createLesson(uid, chapter, gen);
+          created = true;
+        }
       }
       const problems = parseJ(lesson.problems) || [];
+      const partners = await partnersOf(uid, 'german');
       return json(res, 200, {
-        ok: true, created,
+        ok: true, created, shared,
+        me: { id: me.id, name: me.name, isOwner: !!me.is_owner },
         lesson: {
           id: lesson.id, chapterNo: lesson.chapter_no, unit: lesson.unit,
           title: lesson.title, deTitle: lesson.de_title,
           intro: lesson.intro, concept: lesson.concept, aside: lesson.aside || '',
           warmup: parseJ(lesson.warmup) || [],
           walkthrough: parseJ(lesson.walkthrough) || {},
-          // 정답·함정은 내려보내지 않습니다. 힌트는 눌러서 볼 수 있으니 함께 보냅니다.
           problems: problems.map(p => ({
             question: p.question, level: p.level || 'trap', hint: p.hint || '',
             gloss: Array.isArray(p.gloss) ? p.gloss : [],
@@ -634,50 +671,73 @@ async function handleGerman(req, res, query, body) {
           summary: parseJ(lesson.summary) || [],
           step: lesson.step, turns: parseJ(lesson.turns) || [],
         },
-        stats: await GE.getGermanStats(), xp: await GE.getXpState(),
-        gaps: await GE.getGaps(5),
-        // 📓 지난 장에서 낸 쓰기 과제 중 아직 안 한 것 — 진도를 막지는 않습니다
-        notebookPending: await NB.getPending('german', 3),
+        stats: await GE.getGermanStats(uid), xp: await GE.getXpState(uid),
+        gaps: await GE.getGaps(uid, 5),
+        notebookPending: await NB.getPending(uid, 'german', 3),
+        partnerCount: partners.length,
+        unseenNotes: await TG.unseenCount(uid, 'german'),
       });
     }
 
     if (action === "notebook") {
-      const idx = await NB.getIndex('german');
-      // idx.stats(노트 진행)와 과정 통계가 이름이 겹치므로 분리해서 내려보냅니다
+      const idx = await NB.getIndex(uid, 'german');
       return json(res, 200, { ok: true, pages: idx.pages, notebookStats: idx.stats,
         kinds: NB.TASK_KINDS,
-        stats: await GE.getGermanStats(), xp: await GE.getXpState() });
+        stats: await GE.getGermanStats(uid), xp: await GE.getXpState(uid) });
     }
 
     if (action === "map") {
-      const done = await GE.getDoneChapters();
-      const profile = await GE.getProfile();
+      const done = await GE.getDoneChapters(uid);
+      const profile = await GE.getProfile(uid);
       const currentNo = GE.getChapter(profile?.chapter_index ?? 0).no;
       return json(res, 200, {
         ok: true, units: GE.UNITS, currentNo,
         chapters: GE.CHAPTERS.map(c => ({
           ...c, done: done.includes(c.no), current: c.no === currentNo,
         })),
-        stats: await GE.getGermanStats(), xp: await GE.getXpState(),
+        stats: await GE.getGermanStats(uid), xp: await GE.getXpState(uid),
       });
     }
 
     if (action === "review") {
       return json(res, 200, {
-        ok: true, cards: await GE.getDueCards(12), tiers: GE.TIERS,
-        stats: await GE.getGermanStats(), xp: await GE.getXpState(),
+        ok: true, cards: await GE.getDueCards(uid, 12), tiers: GE.TIERS,
+        stats: await GE.getGermanStats(uid), xp: await GE.getXpState(uid),
       });
     }
 
     if (action === "collection") {
-      const col = await GE.getCollection();
+      const col = await GE.getCollection(uid);
       return json(res, 200, { ok: true, ...col, tiers: GE.TIERS,
-        stats: await GE.getGermanStats(), xp: await GE.getXpState() });
+        stats: await GE.getGermanStats(uid), xp: await GE.getXpState(uid) });
     }
 
     if (action === "gaps") {
-      return json(res, 200, { ok: true, gaps: await GE.getGaps(20),
-        stats: await GE.getGermanStats() });
+      return json(res, 200, { ok: true, gaps: await GE.getGaps(uid, 20),
+        stats: await GE.getGermanStats(uid) });
+    }
+
+    // 🤝 함께 — 친구 진도 + 주고받은 설명
+    if (action === "together") {
+      const partners = await partnersOf(uid, 'german');
+      const profile = await GE.getProfile(uid);
+      await TG.markSeen(uid, 'german');
+      return json(res, 200, {
+        ok: true,
+        me: { id: me.id, name: me.name, isOwner: !!me.is_owner,
+              chapterIndex: profile?.chapter_index ?? 0 },
+        partners: await TG.partnerProgress('german', partners),
+        inbox: await TG.inboxFor(uid, 'german'),
+        outbox: await TG.outboxFor(uid, 'german'),
+        chapters: GE.CHAPTERS.map(c => ({ no: c.no, sec: c.sec, title: c.title, de: c.de })),
+        stats: await GE.getGermanStats(uid), xp: await GE.getXpState(uid),
+      });
+    }
+
+    // 초대 관리 — 주인만
+    if (action === "members") {
+      if (!me.is_owner) return json(res, 403, { ok: false, message: "주인만 볼 수 있어요." });
+      return json(res, 200, { ok: true, users: await listUsers() });
     }
 
     return json(res, 400, { ok: false, message: "알 수 없는 action" });
@@ -685,13 +745,12 @@ async function handleGerman(req, res, query, body) {
 
   if (req.method === "POST") {
     if (body.action === "step") {
-      await GE.advanceStep(body.lessonId, Number(body.step) || 0, null);
+      await GE.advanceStep(uid, body.lessonId, Number(body.step) || 0, null);
       return json(res, 200, { ok: true });
     }
 
-    // 🙋 "여기가 이해 안 돼요"
     if (body.action === "deepen") {
-      const lesson = await GE.getOpenLesson();
+      const lesson = await GE.getOpenLesson(uid);
       if (!lesson || lesson.id !== body.lessonId) {
         return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
       }
@@ -707,8 +766,7 @@ async function handleGerman(req, res, query, body) {
       };
       const sec = SECTIONS[body.section] || SECTIONS.concept;
       const out = await GE.explainMore({
-        chapter: GE.CHAPTERS.find(c => c.no === lesson.chapter_no) || { unit: lesson.unit,
-          title: lesson.title, de: lesson.de_title, sec: '', no: lesson.chapter_no },
+        chapter: chapterMeta(lesson),
         sectionLabel: sec.label, sectionText: sec.text, question: body.question,
         askedBefore: Array.isArray(body.askedBefore) ? body.askedBefore.slice(-3) : [],
       });
@@ -717,7 +775,7 @@ async function handleGerman(req, res, query, body) {
     }
 
     if (body.action === "answer") {
-      const lesson = await GE.getOpenLesson();
+      const lesson = await GE.getOpenLesson(uid);
       if (!lesson || lesson.id !== body.lessonId) {
         return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
       }
@@ -726,99 +784,154 @@ async function handleGerman(req, res, query, body) {
       const problem = problems[idx];
       if (!problem) return json(res, 400, { ok: false, message: "문제를 찾을 수 없습니다." });
 
-      const chapter = GE.CHAPTERS.find(c => c.no === lesson.chapter_no)
-        || { unit: lesson.unit, title: lesson.title, de: lesson.de_title, sec: '', no: lesson.chapter_no };
+      const chapter = chapterMeta(lesson);
       const graded = await GE.gradeAnswer({
         chapter, problem, userAnswer: body.answer, history: parseJ(lesson.turns) || [],
       });
       if (graded.parseError) return json(res, 200, { ok: true, parseError: true, message: graded.feedback });
 
-      await GE.advanceStep(lesson.id, Number(body.step) || lesson.step,
-        { role: 'user', content: String(body.answer).slice(0, 800),
+      // problemIndex를 함께 남깁니다 — 친구와 답을 맞춰 보려면 어느 문제였는지 알아야 합니다
+      await GE.advanceStep(uid, lesson.id, Number(body.step) || lesson.step,
+        { role: 'user', problemIndex: idx, content: String(body.answer).slice(0, 800),
           correct: graded.correct, at: new Date().toISOString() });
 
-      if (graded.gapConcept) await GE.recordGap(lesson.chapter_no, graded.gapConcept, graded.gapPatch);
+      if (graded.gapConcept) await GE.recordGap(uid, lesson.chapter_no, graded.gapConcept, graded.gapPatch);
 
-      // 📓 틀렸으면 새 설명 대신 본인이 쓴 노트를 가리킵니다 (쓴 기록이 있을 때만)
       let notebookPointer = null;
       if (!graded.correct) {
-        notebookPointer = await NB.pointerFor('german', GE.CHAPTERS, lesson.chapter_no, graded.gapConcept);
-        // 오답 정리 과제. 한 장에서 세 문제를 다 틀려도 과제가 쌓이지 않게 한 개로 막습니다
-        const already = await NB.countOpen('german', lesson.chapter_no, 'errors');
+        notebookPointer = await NB.pointerFor(uid, 'german', GE.CHAPTERS, lesson.chapter_no, graded.gapConcept);
+        const already = await NB.countOpen(uid, 'german', lesson.chapter_no, 'errors');
         if (already === 0) {
-          await NB.issueTasks('german', chapterMetaOf(GE, lesson),
+          await NB.issueTasks(uid, 'german', chapter,
             [NB.errorTask(problem.answer)]).catch(() => {});
         }
       }
 
-      // 🎮 XP는 '맞혔을 때'만. 제출 횟수로는 얻을 수 없습니다
       const xpGained = graded.correct
-        ? await GE.grantXp(20, '확인문제 정답', `${lesson.id}_p${idx}`)
+        ? await GE.grantXp(uid, 20, '확인문제 정답', `${lesson.id}_p${idx}`)
         : 0;
+
+      // 🤝 내가 제출한 뒤에만 친구 답이 열립니다 (먼저 열리면 베끼게 됩니다)
+      const partners = await partnersOf(uid, 'german');
+      const peers = await TG.peerAnswers({
+        course: 'german', chapterNo: lesson.chapter_no, problemIndex: idx,
+        userId: uid, partnerIds: partners.map(p => p.id), mySubmitted: true,
+      });
 
       return json(res, 200, {
         ok: true, graded, xpGained, answer: problem.answer, notebookPointer,
-        xp: await GE.getXpState(),
+        peers, problemIndex: idx, chapterNo: lesson.chapter_no,
+        xp: await GE.getXpState(uid),
+      });
+    }
+
+    // 🤝 친구 답에 설명 남기기 — 레나가 먼저 검증합니다
+    if (body.action === "explain-peer") {
+      const lesson = await GE.getOpenLesson(uid);
+      const chapterNo = Number(body.chapterNo) || lesson?.chapter_no;
+      const idx = Number(body.problemIndex) || 0;
+      const text = String(body.text || '').trim();
+      if (!text) return json(res, 400, { ok: false, message: "설명을 적어주세요." });
+      if (!chapterNo) return json(res, 400, { ok: false, message: "어느 장인지 알 수 없어요." });
+
+      const partners = await partnersOf(uid, 'german');
+      const target = partners.find(p => p.id === Number(body.toUser));
+      if (!target) return json(res, 400, { ok: false, message: "그런 친구가 없어요." });
+
+      const chapter = GE.CHAPTERS.find(c => c.no === chapterNo) || { no: chapterNo, sec: '', title: '', de: '', unit: '' };
+      const problems = parseJ(lesson?.problems) || [];
+      const prob = problems[idx] || {};
+
+      const check = await TG.verifyExplanation({
+        chapter, problem: prob.question || '(문제 없음)', correctAnswer: prob.answer || '',
+        peerAnswer: body.peerAnswer, explanation: text, persona: GE.LENA_FOR_PEER,
+      });
+
+      const saved = await TG.saveNote({
+        course: 'german', chapterNo, problemIndex: idx, fromUser: uid,
+        toUser: target.id, text, verdict: check.verdict, lenaNote: check.note,
+      });
+      // 설명이 맞았을 때만 작게 보상합니다 (가르치는 쪽이 더 배우니까요)
+      // 저장에 실패하면 ref가 undefined가 되어 다음 설명까지 막히므로 그때는 XP를 건너뜁니다
+      const xpGained = check.verdict === 'ok' && saved?.id
+        ? await GE.grantXp(uid, 15, '친구에게 설명', `peer_${saved.id}`) : 0;
+
+      return json(res, 200, {
+        ok: true, verdict: check.verdict, lenaNote: check.note,
+        delivered: check.verdict === 'ok', xpGained, xp: await GE.getXpState(uid),
       });
     }
 
     if (body.action === "complete") {
-      const lesson = await GE.getOpenLesson();
+      const lesson = await GE.getOpenLesson(uid);
       if (!lesson || lesson.id !== body.lessonId) {
         return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
       }
-      const cardsAdded = await GE.addCards(parseJ(lesson.cards) || [], lesson.chapter_no);
-
-      // 📓 쓰기 과제 발행 — 레나가 지정한 게 없으면 수업 내용에서 만들어냅니다
-      const chapterMeta = chapterMetaOf(GE, lesson);
+      const cardsAdded = await GE.addCards(uid, parseJ(lesson.cards) || [], lesson.chapter_no);
+      const meta = chapterMeta(lesson);
       let nbTasks = parseJ(lesson.notebook) || [];
       if (!nbTasks.length) {
-        nbTasks = NB.deriveTasks('german', chapterMeta, {
+        nbTasks = NB.deriveTasks('german', meta, {
           concept: lesson.concept, walkthrough: parseJ(lesson.walkthrough) || {},
           cards: parseJ(lesson.cards) || [],
         });
       }
-      const notebookIssued = await NB.issueTasks('german', chapterMeta, nbTasks);
-
-      await GE.completeLesson(lesson.id);
-      const xpGained = await GE.grantXp(60, `${lesson.title} 수료`, `${lesson.id}_done`);
+      const notebookIssued = await NB.issueTasks(uid, 'german', meta, nbTasks);
+      await GE.completeLesson(uid, lesson.id);
+      const xpGained = await GE.grantXp(uid, 60, `${lesson.title} 수료`, `${lesson.id}_done`);
       return json(res, 200, {
         ok: true, cardsAdded, xpGained, notebookIssued,
-        notebookTasks: await NB.getPending('german', 4),
-        stats: await GE.getGermanStats(), xp: await GE.getXpState(),
+        notebookTasks: await NB.getPending(uid, 'german', 4),
+        stats: await GE.getGermanStats(uid), xp: await GE.getXpState(uid),
       });
     }
 
     if (body.action === "review") {
-      // ✍️ wrote=true — 노트에 손으로 써서 맞힌 경우. 간격을 더 길게 받습니다
-      const out = await GE.reviewCard(body.cardId, Number(body.quality), !!body.wrote);
+      const out = await GE.reviewCard(uid, body.cardId, Number(body.quality), !!body.wrote);
       if (!out) return json(res, 404, { ok: false, message: "카드를 찾을 수 없습니다." });
-      return json(res, 200, { ok: true, ...out, xp: await GE.getXpState() });
+      return json(res, 200, { ok: true, ...out, xp: await GE.getXpState(uid) });
     }
 
-    // 📓 노트 과제 회수 — 자가신고입니다. 검증하지 않습니다
     if (body.action === "notebook-done") {
-      const out = await NB.bumpTask(body.taskId, Number(body.by) || 1);
+      const out = await NB.bumpTask(uid, body.taskId, Number(body.by) || 1);
       if (!out) return json(res, 404, { ok: false, message: "그런 과제가 없거나 이미 끝났습니다." });
-      // 다 채웠을 때만 작게 보상합니다 (과잉정당화를 피해 XP는 낮게)
       const xpGained = out.closed
-        ? await GE.grantXp(15, '노트 과제 완료', `nb_${body.taskId}`) : 0;
-      return json(res, 200, { ok: true, ...out, xpGained, xp: await GE.getXpState() });
+        ? await GE.grantXp(uid, 15, '노트 과제 완료', `nb_${body.taskId}`) : 0;
+      return json(res, 200, { ok: true, ...out, xpGained, xp: await GE.getXpState(uid) });
     }
 
     if (body.action === "notebook-skip") {
-      const ok = await NB.dismissTask(body.taskId);
+      const ok = await NB.dismissTask(uid, body.taskId);
       return json(res, 200, { ok, message: ok ? '접었습니다.' : '이미 처리된 과제입니다.' });
     }
 
-    // 목차에서 다른 장으로 점프
     if (body.action === "jump") {
       const idx = GE.CHAPTERS.findIndex(c => c.no === Number(body.chapterNo));
       if (idx < 0) return json(res, 400, { ok: false, message: "그런 장이 없습니다." });
-      const open = await GE.getOpenLesson();
-      if (open) await GE.completeLesson(open.id).catch(() => {});
-      await GE.setChapterIndex(idx);
+      const open = await GE.getOpenLesson(uid);
+      if (open) await GE.completeLesson(uid, open.id).catch(() => {});
+      await GE.setChapterIndex(uid, idx);
       return json(res, 200, { ok: true });
+    }
+
+    /* ── 초대 관리 (주인만) ── */
+    if (body.action === "invite") {
+      if (!me.is_owner) return json(res, 403, { ok: false, message: "주인만 초대할 수 있어요." });
+      const u = await invite(body.name, ['german']);
+      if (!u) return json(res, 500, { ok: false, message: "초대를 만들지 못했습니다." });
+      return json(res, 200, { ok: true, user: { id: u.id, name: u.name, key: u.login_key } });
+    }
+
+    if (body.action === "member-remove") {
+      if (!me.is_owner) return json(res, 403, { ok: false, message: "주인만 할 수 있어요." });
+      return json(res, 200, { ok: await removeUser(body.userId) });
+    }
+
+    if (body.action === "member-rotate") {
+      if (!me.is_owner) return json(res, 403, { ok: false, message: "주인만 할 수 있어요." });
+      const u = await rotateKey(body.userId);
+      if (!u) return json(res, 404, { ok: false, message: "그런 사람이 없어요." });
+      return json(res, 200, { ok: true, user: { id: u.id, name: u.name, key: u.login_key } });
     }
 
     return json(res, 400, { ok: false, message: "알 수 없는 action" });

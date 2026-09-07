@@ -16,7 +16,8 @@
       <p class="gate-eyebrow">ÜBUNGSGRAMMATIK</p>
       <h1 class="gate-title">레나의<br/>독일어 노트</h1>
       <p class="gate-sub">Regeln · Listen · Übungen<br/>조교이자 스파링 파트너, 레나와 함께</p>
-      <input id="keyInput" type="password" placeholder="관리자 키" autocomplete="current-password" />
+      <p class="gate-hint">초대받으셨다면 받은 키를 그대로 넣으세요.</p>
+      <input id="keyInput" type="password" placeholder="내 키" autocomplete="current-password" />
       <button id="enterBtn" class="btn-primary">노트 펼치기</button>
       <p id="gateError" class="gate-error" hidden></p>
     </div>
@@ -25,7 +26,7 @@
   <div id="app" hidden>
     <header class="topbar">
       <div class="brand">
-        <span class="brand-sub">레나의 독일어 노트</span>
+        <span class="brand-sub">레나의 독일어 노트 <b id="whoami"></b></span>
         <span class="brand-main" id="chapterLabel">—</span>
       </div>
       <div class="stat-strip" id="statStrip"></div>
@@ -43,6 +44,7 @@
       <button data-tab="review">복습 <span id="dueBadge" class="badge" hidden>0</span></button>
       <button data-tab="collection">도감</button>
       <button data-tab="notebook">내 노트 <span id="nbBadge" class="badge" hidden>0</span></button>
+      <button data-tab="together">함께 <span id="tgBadge" class="badge" hidden>0</span></button>
       <button data-tab="gaps">약한 곳</button>
     </nav>
 
