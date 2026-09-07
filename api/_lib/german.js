@@ -298,7 +298,9 @@ export const LENA_FOR_PEER = `당신은 '레나(Lena)'입니다. 학습자가 �
 export async function ensureGermanTables() {
   const pool = getPool();
   if (!pool || tablesReady) return;
-  tablesReady = pool.query(`
+  tablesReady = (async () => {
+    // 1) 테이블 — 없을 때만 만듭니다
+    await pool.query(`
     CREATE TABLE IF NOT EXISTS german_profile (
       id INTEGER PRIMARY KEY DEFAULT 1,
       chapter_index INTEGER NOT NULL DEFAULT 0,
@@ -358,33 +360,55 @@ export async function ensureGermanTables() {
       ref TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_gx_ref ON german_xp(ref) WHERE ref IS NOT NULL;
-    INSERT INTO german_profile (id, chapter_index, user_id) VALUES (1, 0, 1) ON CONFLICT (id) DO NOTHING;
+    `);
 
-    -- 노트 연동으로 추가된 칼럼. 이미 만들어진 테이블에도 붙도록 ALTER로 둡니다
-    -- (CREATE TABLE IF NOT EXISTS는 기존 테이블에 칼럼을 더해주지 않습니다)
-    ALTER TABLE german_lessons ADD COLUMN IF NOT EXISTS notebook JSONB NOT NULL DEFAULT '[]';
+    // 2) 마이그레이션
+    //    ⚠️ 한 덩어리로 묶으면 문장 하나가 실패할 때 나머지가 통째로 안 돕니다.
+    //       (예전에 씨앗 INSERT가 아직 없는 칼럼을 참조해서 ALTER가 전부 건너뛰어졌습니다)
+    //       그래서 한 문장씩 따로 실행하고, 실패는 기록만 남깁니다.
+    for (const sql of GERMAN_MIGRATIONS) {
+      await pool.query(sql).catch((e) =>
+        console.warn('[German] 마이그레이션 건너뜀:', sql.trim().slice(0, 70), '—', e.message));
+    }
 
-    -- 👥 사용자 분리. 기존 데이터는 전부 주인(id=1)의 것이므로 DEFAULT 1로 이관됩니다
-    ALTER TABLE german_profile ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
-    ALTER TABLE german_lessons ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
-    ALTER TABLE german_cards   ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
-    ALTER TABLE german_gaps    ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
-    ALTER TABLE german_xp      ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
-
-    -- 프로필은 사람당 한 줄이어야 합니다 (기존 PK는 id 하나뿐이었습니다)
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_gp_user ON german_profile(user_id);
-    CREATE INDEX IF NOT EXISTS idx_gl_user ON german_lessons(user_id, status);
-    CREATE INDEX IF NOT EXISTS idx_gc_user ON german_cards(user_id, due_at);
-    CREATE INDEX IF NOT EXISTS idx_gg_user ON german_gaps(user_id, resolved);
-
-    -- XP 중복 방지 키가 전역이라 두 사람이 같은 ref를 쓰면 한쪽이 막힙니다 → 사람별로
-    DROP INDEX IF EXISTS idx_gx_ref;
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_gx_user_ref
-      ON german_xp(user_id, ref) WHERE ref IS NOT NULL;
-  `).catch(() => { tablesReady = null; });
+    // 3) 씨앗 — 칼럼이 모두 붙은 뒤에 넣어야 합니다
+    await pool.query(
+      `INSERT INTO german_profile (id, chapter_index, user_id)
+       VALUES (1, 0, 1) ON CONFLICT (id) DO NOTHING`
+    ).catch((e) => console.warn('[German] 주인 프로필 씨앗 실패:', e.message));
+  })().catch((e) => {
+    console.error('[German] 스키마 준비 실패:', e.message);
+    tablesReady = null;   // 다음 요청에서 다시 시도합니다
+  });
   await tablesReady;
 }
+
+/**
+ * 이미 만들어진 테이블에 칼럼·인덱스를 붙입니다.
+ * CREATE TABLE IF NOT EXISTS는 기존 테이블을 건드리지 않으므로 여기서 따로 처리합니다.
+ * 순서가 중요합니다 — 칼럼을 먼저 붙이고 그 칼럼을 쓰는 인덱스를 만듭니다.
+ */
+const GERMAN_MIGRATIONS = [
+  // 노트 연동
+  `ALTER TABLE german_lessons ADD COLUMN IF NOT EXISTS notebook JSONB NOT NULL DEFAULT '[]'`,
+
+  // 👥 사용자 분리. 기존 데이터는 전부 주인(id=1)의 것이므로 DEFAULT 1로 이관됩니다
+  `ALTER TABLE german_profile ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE german_lessons ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE german_cards   ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE german_gaps    ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE german_xp      ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+
+  // 프로필은 사람당 한 줄 (기존 PK는 id 하나뿐이었습니다)
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_gp_user ON german_profile(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_gl_user ON german_lessons(user_id, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_gc_user ON german_cards(user_id, due_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_gg_user ON german_gaps(user_id, resolved)`,
+
+  // XP 중복 방지 키가 전역이면 두 사람이 같은 ref를 쓸 때 한쪽이 막힙니다 → 사람별로
+  `DROP INDEX IF EXISTS idx_gx_ref`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_gx_user_ref ON german_xp(user_id, ref) WHERE ref IS NOT NULL`,
+];
 
 // ═══════════════════════════════════════════════════
 // 🧠 수업 생성
