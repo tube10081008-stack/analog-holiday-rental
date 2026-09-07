@@ -285,6 +285,23 @@ export const LENA_FOR_PEER = `당신은 '레나(Lena)'입니다. 학습자가 �
 - 판서를 넣은 뒤에는 그 표를 **말로 다시 읊지 마세요.** 표가 이미 말했습니다.
   대신 "이 표에서 무엇을 봐야 하는지" 한두 문장만 덧붙이세요.
 
+## 한글 발음 표기 (read 항목)
+이 학습자는 독일어 소리를 아직 모릅니다. 글자만 봐서는 읽을 수가 없어요.
+그래서 read 항목에 **한글로 읽는 법**을 적어 줍니다.
+
+- 국립국어원 외래어 표기법(독일어)을 기준으로 하되, 실제로 들리는 소리를 우선합니다.
+- 대괄호 없이 한글만: "프라우" (O) / "[프라우]" (X)
+- 자주 틀리는 곳을 특히 정확히:
+  · ei → 아이 (Wein 바인), ie → 이 (Bier 비어), eu/äu → 오이 (Deutsch 도이치)
+  · ä → 에, ö → 외, ü → 위
+  · z → ㅊ (Zeit 차이트), w → ㅂ (Wein 바인), v → ㅍ (Vater 파터)
+  · s + 모음 → ㅈ (Sie 지), ß → ㅅ, sch → 슈 (Schule 슐레)
+  · 어두 st-/sp- → 슈트/슈프 (Stadt 슈타트, sprechen 슈프레헨)
+  · ch: a/o/u 뒤 → ㅎ (Bach 바흐), 그 밖 → 히 (ich 이히)
+  · 어말 -er → 어 (Vater 파터), 어말 -r → 어
+  · 어말 -b/-d/-g는 무성음으로 (Tag 타크, und 운트)
+- **모르면 억지로 만들지 말고 빈 문자열로 두세요.** 틀린 발음 표기는 없느니만 못합니다.
+
 ## 독일어 표기
 - 움라우트와 에스체트를 정확히: ä ö ü Ä Ö Ü ß
 - 명사는 항상 대문자로 시작합니다. 이걸 틀리지 마세요.
@@ -335,6 +352,7 @@ export async function ensureGermanTables() {
       back TEXT NOT NULL DEFAULT '',
       note TEXT DEFAULT '',
       genus TEXT,
+      read_ko TEXT DEFAULT '',
       chapter_no INTEGER NOT NULL DEFAULT 1,
       ease REAL NOT NULL DEFAULT 2.5,
       interval_days REAL NOT NULL DEFAULT 0,
@@ -391,6 +409,8 @@ export async function ensureGermanTables() {
 const GERMAN_MIGRATIONS = [
   // 노트 연동
   `ALTER TABLE german_lessons ADD COLUMN IF NOT EXISTS notebook JSONB NOT NULL DEFAULT '[]'`,
+  // 한글 발음 표기
+  `ALTER TABLE german_cards ADD COLUMN IF NOT EXISTS read_ko TEXT DEFAULT ''`,
 
   // 👥 사용자 분리. 기존 데이터는 전부 주인(id=1)의 것이므로 DEFAULT 1로 이관됩니다
   `ALTER TABLE german_profile ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
@@ -457,6 +477,7 @@ ${priorContext}
   · board: 그 단계까지의 누적 판서 (문장을 자리별로 늘어놓거나 변화표를 채워가는 식).
     매 단계 처음부터 다시 그리되 **그 단계까지 정해진 것만** 채우세요.
     판서 표시(\`\`\`판서)는 붙이지 말고 내용만. 필요 없으면 빈 문자열.
+- read: 예문 전체를 한글로 읽는 법 (독일어 부분만. 한국어 뜻은 빼고)
 - gloss: 이 예문에 나온 낱말 각주. 형식과 규칙은 확인 문제의 gloss와 같습니다.
   **문장을 처음 보는 사람이 사전 없이 따라올 수 있어야 합니다.**
 - recap: 전체 전략 한두 문장 ("결국 하는 일은 ~를 보고 ~를 정하는 거예요")
@@ -472,7 +493,8 @@ gloss(낱말 각주)
 
 **gloss는 반드시 채우세요.** 이 문제에 나온 독일어 낱말을 하나도 빠짐없이 풀어 줍니다.
 사전 없이 이 문제를 풀 수 있어야 합니다.
-- 형식: [{"w":"낱말","ko":"뜻"}]
+- 형식: [{"w":"낱말","ko":"뜻","read":"한글 발음"}]
+- **read는 반드시 채우세요.** 글자만 보고는 읽을 수 없는 학습자입니다.
 - **명사는 관사와 함께**: {"w":"das Buch","ko":"책"}
 - **동사는 부정형으로**: {"w":"lernen","ko":"배우다·공부하다"}
   (문제에 활용형 lernst가 나와도 gloss에는 원형 lernen을 씁니다)
@@ -489,7 +511,8 @@ term(형태·용어) / meaning(뜻·쓰임) / caution(주의할 점)
 - "stamm" — 강변화·불규칙 동사의 3기본형. front는 부정형, back은 "기본형 – 과거 – 과거분사"
 - "rule" — 문법 규칙. front는 질문 형태, back은 답
 - "vocab" — 어휘·숙어. front는 독일어, back은 뜻
-각 카드: kind / front / back / note(언제 쓰는지 한 줄) / genus(성 카드만, 아니면 null)
+각 카드: kind / front / back / note(언제 쓰는지 한 줄) / genus(성 카드만, 아니면 null) /
+read(front의 한글 발음. rule 카드처럼 독일어 낱말이 아니면 빈 문자열)
 
 ### notebook (노트 과제 1~2개)
 수업을 마치고 **종이 노트에 펜으로** 할 일입니다. 앱은 이 노트를 읽지 않습니다.
@@ -509,10 +532,10 @@ term(형태·용어) / meaning(뜻·쓰임) / caution(주의할 점)
 {"intro":"...",
  "warmup":[{"concept":"...","refresher":"...","why":"..."}],
  "concept":"...",
- "walkthrough":{"problem":"...","gloss":[{"w":"...","ko":"..."}],"steps":[{"what":"...","why":"...","board":"..."}],"recap":"..."},
- "problems":[{"question":"...","answer":"...","level":"easy","trap":"","prereq":"...","hint":"...","gloss":[{"w":"...","ko":"..."}]}],
+ "walkthrough":{"problem":"...","gloss":[{"w":"...","ko":"...","read":"..."}],"read":"...","steps":[{"what":"...","why":"...","board":"..."}],"recap":"..."},
+ "problems":[{"question":"...","answer":"...","level":"easy","trap":"","prereq":"...","hint":"...","gloss":[{"w":"...","ko":"...","read":"..."}]}],
  "summary":[{"term":"...","meaning":"...","caution":"..."}],
- "cards":[{"kind":"genus","front":"...","back":"...","note":"...","genus":"der"}],
+ "cards":[{"kind":"genus","front":"...","back":"...","note":"...","genus":"der","read":"..."}],
  "notebook":[{"kind":"table","spec":"...","target":3}],
  "aside":"..."}`;
 
@@ -786,9 +809,10 @@ export async function addCards(userId, cards, chapterNo) {
     const id = `gc_u${userId}_${chapterNo}_${Buffer.from(String(c.front)).toString('base64url').slice(0, 40)}`;
     try {
       const r = await pool.query(
-        `INSERT INTO german_cards (id, user_id, kind, front, back, note, genus, chapter_no)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
-        [id, userId, kind, c.front, c.back || '', c.note || '', genus, chapterNo]);
+        `INSERT INTO german_cards (id, user_id, kind, front, back, note, genus, read_ko, chapter_no)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING`,
+        [id, userId, kind, c.front, c.back || '', c.note || '', genus,
+         String(c.read || '').slice(0, 80), chapterNo]);
       if (r.rowCount > 0) n++;
     } catch { /* skip */ }
   }
@@ -803,7 +827,7 @@ export async function getDueCards(userId, limit = 12) {
      ORDER BY due_at ASC LIMIT $2`, [userId, limit]);
   return r.rows.map(c => ({
     id: c.id, kind: c.kind, front: c.front, back: c.back, note: c.note,
-    genus: c.genus, tier: cardTier(c), chapterNo: c.chapter_no,
+    genus: c.genus, read: c.read_ko || '', tier: cardTier(c), chapterNo: c.chapter_no,
   }));
 }
 
@@ -878,7 +902,7 @@ export async function getCollection(userId) {
   for (const c of r.rows) {
     (kinds[c.kind] ||= []).push({
       id: c.id, front: c.front, back: c.back, note: c.note, genus: c.genus,
-      tier: cardTier(c), chapterNo: c.chapter_no,
+      read: c.read_ko || '', tier: cardTier(c), chapterNo: c.chapter_no,
     });
   }
   return { kinds, total: r.rows.length };
