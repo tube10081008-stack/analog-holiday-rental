@@ -196,7 +196,7 @@ export function getChapter(idx) {
 // 👩‍🏫 레나 — 조교이자 스파링 파트너
 // ═══════════════════════════════════════════════════
 
-const LENA = `당신은 '레나(Lena)'입니다. 학습자가 붙여준 이름이고, 당신은 그 호칭을 기쁘게 받습니다.
+export const LENA_FOR_PEER = `당신은 '레나(Lena)'입니다. 학습자가 붙여준 이름이고, 당신은 그 호칭을 기쁘게 받습니다.
 
 ## 당신의 위치 (중요)
 당신은 이 학습자의 **독일어 선생님이 아니라 조교이자 스파링 파트너**입니다.
@@ -359,11 +359,29 @@ export async function ensureGermanTables() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_gx_ref ON german_xp(ref) WHERE ref IS NOT NULL;
-    INSERT INTO german_profile (id, chapter_index) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;
+    INSERT INTO german_profile (id, chapter_index, user_id) VALUES (1, 0, 1) ON CONFLICT (id) DO NOTHING;
 
     -- 노트 연동으로 추가된 칼럼. 이미 만들어진 테이블에도 붙도록 ALTER로 둡니다
     -- (CREATE TABLE IF NOT EXISTS는 기존 테이블에 칼럼을 더해주지 않습니다)
     ALTER TABLE german_lessons ADD COLUMN IF NOT EXISTS notebook JSONB NOT NULL DEFAULT '[]';
+
+    -- 👥 사용자 분리. 기존 데이터는 전부 주인(id=1)의 것이므로 DEFAULT 1로 이관됩니다
+    ALTER TABLE german_profile ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE german_lessons ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE german_cards   ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE german_gaps    ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE german_xp      ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
+
+    -- 프로필은 사람당 한 줄이어야 합니다 (기존 PK는 id 하나뿐이었습니다)
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_gp_user ON german_profile(user_id);
+    CREATE INDEX IF NOT EXISTS idx_gl_user ON german_lessons(user_id, status);
+    CREATE INDEX IF NOT EXISTS idx_gc_user ON german_cards(user_id, due_at);
+    CREATE INDEX IF NOT EXISTS idx_gg_user ON german_gaps(user_id, resolved);
+
+    -- XP 중복 방지 키가 전역이라 두 사람이 같은 ref를 쓰면 한쪽이 막힙니다 → 사람별로
+    DROP INDEX IF EXISTS idx_gx_ref;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_gx_user_ref
+      ON german_xp(user_id, ref) WHERE ref IS NOT NULL;
   `).catch(() => { tablesReady = null; });
   await tablesReady;
 }
@@ -371,6 +389,8 @@ export async function ensureGermanTables() {
 // ═══════════════════════════════════════════════════
 // 🧠 수업 생성
 // ═══════════════════════════════════════════════════
+
+const LENA = LENA_FOR_PEER;
 
 /** 한 챕터의 수업 전체를 생성합니다 */
 export async function generateLesson(chapter, priorContext) {
@@ -612,36 +632,61 @@ ${askedBefore.length ? `\n## 이미 시도한 다른 접근들 (또 반복하지
 // 💾 진도 · 레슨 · 카드 · XP
 // ═══════════════════════════════════════════════════
 
-export async function getProfile() {
+export async function getProfile(userId) {
   const pool = getPool(); if (!pool) return null;
   await ensureGermanTables();
-  const r = await pool.query(`SELECT * FROM german_profile WHERE id=1`);
-  return r.rows[0] || null;
+  const r = await pool.query(`SELECT * FROM german_profile WHERE user_id=$1`, [userId]);
+  if (r.rows[0]) return r.rows[0];
+  // 친구가 처음 들어온 경우 — 그 자리에서 프로필을 만들어 줍니다
+  // ⚠️ id는 PRIMARY KEY DEFAULT 1 이라 생략하면 주인 행과 부딪힙니다.
+  //    사람 번호를 그대로 id로 씁니다.
+  const ins = await pool.query(
+    `INSERT INTO german_profile (id, chapter_index, user_id) VALUES ($1, 0, $1)
+     ON CONFLICT (id) DO NOTHING RETURNING *`, [userId]).catch(() => ({ rows: [] }));
+  if (ins.rows[0]) return ins.rows[0];
+  const again = await pool.query(`SELECT * FROM german_profile WHERE user_id=$1`, [userId]);
+  return again.rows[0] || null;
 }
 
-export async function setChapterIndex(idx) {
+export async function setChapterIndex(userId, idx) {
   const pool = getPool(); if (!pool) return;
-  await ensureGermanTables();
-  await pool.query(`UPDATE german_profile SET chapter_index=$1 WHERE id=1`,
-    [Math.max(0, Math.min(CHAPTERS.length - 1, Number(idx) || 0))]);
+  await getProfile(userId);
+  await pool.query(`UPDATE german_profile SET chapter_index=$1 WHERE user_id=$2`,
+    [Math.max(0, Math.min(CHAPTERS.length - 1, Number(idx) || 0)), userId]);
 }
 
-export async function getOpenLesson() {
+export async function getOpenLesson(userId) {
   const pool = getPool(); if (!pool) return null;
   await ensureGermanTables();
-  const r = await pool.query(`SELECT * FROM german_lessons WHERE status='open' ORDER BY created_at DESC LIMIT 1`);
+  const r = await pool.query(
+    `SELECT * FROM german_lessons WHERE user_id=$1 AND status='open'
+     ORDER BY created_at DESC LIMIT 1`, [userId]);
   return r.rows[0] || null;
 }
 
-export async function createLesson(chapter, gen) {
+/**
+ * 🤝 같은 장을 이미 누군가 배웠다면 그 수업 내용을 그대로 씁니다.
+ * 둘이 같은 텍스트를 읽어야 서로 답을 비교하는 게 의미가 있고, 생성 비용도 아낍니다.
+ * 진행(step)과 주고받은 기록(turns)은 사람마다 새로 시작합니다.
+ */
+export async function findSharedLesson(chapterNo) {
   const pool = getPool(); if (!pool) return null;
-  const id = `gl_${chapter.no}_${Date.now()}`;
+  await ensureGermanTables();
+  const r = await pool.query(
+    `SELECT * FROM german_lessons WHERE chapter_no=$1
+     ORDER BY created_at ASC LIMIT 1`, [chapterNo]);
+  return r.rows[0] || null;
+}
+
+export async function createLesson(userId, chapter, gen) {
+  const pool = getPool(); if (!pool) return null;
+  const id = `gl_u${userId}_${chapter.no}_${Date.now()}`;
   await pool.query(
     `INSERT INTO german_lessons
-       (id, chapter_no, unit, title, de_title, intro, warmup, concept, walkthrough,
+       (id, user_id, chapter_no, unit, title, de_title, intro, warmup, concept, walkthrough,
         problems, summary, cards, notebook, aside)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-    [id, chapter.no, chapter.unit, chapter.title, chapter.de, gen.intro,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+    [id, userId, chapter.no, chapter.unit, chapter.title, chapter.de, gen.intro,
      JSON.stringify(gen.warmup || []), gen.concept,
      JSON.stringify(gen.walkthrough || {}), JSON.stringify(gen.problems),
      JSON.stringify(gen.summary || []), JSON.stringify(gen.cards || []),
@@ -651,45 +696,53 @@ export async function createLesson(chapter, gen) {
   return r.rows[0];
 }
 
-export async function advanceStep(lessonId, step, turn) {
+export async function advanceStep(userId, lessonId, step, turn) {
   const pool = getPool(); if (!pool) return;
+  // 레슨 id에 사용자가 박혀 있고 라우트가 소유를 확인하지만, 쿼리에도 걸어둡니다
   if (turn) {
     await pool.query(
-      `UPDATE german_lessons SET step=$1, turns = turns || $2::jsonb WHERE id=$3`,
-      [step, JSON.stringify([turn]), lessonId]);
+      `UPDATE german_lessons SET step=$1, turns = turns || $2::jsonb
+        WHERE id=$3 AND user_id=$4`,
+      [step, JSON.stringify([turn]), lessonId, userId]);
   } else {
-    await pool.query(`UPDATE german_lessons SET step=$1 WHERE id=$2`, [step, lessonId]);
+    await pool.query(
+      `UPDATE german_lessons SET step=$1 WHERE id=$2 AND user_id=$3`,
+      [step, lessonId, userId]);
   }
 }
 
-export async function completeLesson(lessonId) {
+export async function completeLesson(userId, lessonId) {
   const pool = getPool(); if (!pool) return;
-  await pool.query(`UPDATE german_lessons SET status='done', done_at=NOW() WHERE id=$1`, [lessonId]);
-  await pool.query(`UPDATE german_profile SET chapter_index = chapter_index + 1 WHERE id=1`);
+  await pool.query(
+    `UPDATE german_lessons SET status='done', done_at=NOW() WHERE id=$1 AND user_id=$2`,
+    [lessonId, userId]);
+  await pool.query(
+    `UPDATE german_profile SET chapter_index = chapter_index + 1 WHERE user_id=$1`, [userId]);
 }
 
-export async function getDoneChapters() {
+export async function getDoneChapters(userId) {
   const pool = getPool(); if (!pool) return [];
   await ensureGermanTables();
-  const r = await pool.query(`SELECT DISTINCT chapter_no FROM german_lessons WHERE status='done'`);
+  const r = await pool.query(
+    `SELECT DISTINCT chapter_no FROM german_lessons WHERE user_id=$1 AND status='done'`, [userId]);
   return r.rows.map(x => x.chapter_no);
 }
 
-export async function recordGap(chapterNo, concept, detail) {
+export async function recordGap(userId, chapterNo, concept, detail) {
   const pool = getPool(); if (!pool || !concept) return;
   await pool.query(
-    `INSERT INTO german_gaps (chapter_no, concept, detail) VALUES ($1,$2,$3)`,
-    [chapterNo, String(concept).slice(0, 120), String(detail || '').slice(0, 800)]
+    `INSERT INTO german_gaps (user_id, chapter_no, concept, detail) VALUES ($1,$2,$3,$4)`,
+    [userId, chapterNo, String(concept).slice(0, 120), String(detail || '').slice(0, 800)]
   ).catch(() => {});
 }
 
-export async function getGaps(limit = 10) {
+export async function getGaps(userId, limit = 10) {
   const pool = getPool(); if (!pool) return [];
   await ensureGermanTables();
   const r = await pool.query(
     `SELECT concept, COUNT(*)::int AS times, MAX(created_at) AS last_at
-     FROM german_gaps WHERE resolved = FALSE
-     GROUP BY concept ORDER BY times DESC, last_at DESC LIMIT $1`, [limit]);
+     FROM german_gaps WHERE user_id=$1 AND resolved = FALSE
+     GROUP BY concept ORDER BY times DESC, last_at DESC LIMIT $2`, [userId, limit]);
   return r.rows;
 }
 
@@ -697,30 +750,33 @@ export async function getGaps(limit = 10) {
 
 const CARD_KINDS = ['genus', 'stamm', 'rule', 'vocab'];
 
-export async function addCards(cards, chapterNo) {
+export async function addCards(userId, cards, chapterNo) {
   const pool = getPool(); if (!pool || !cards?.length) return 0;
   let n = 0;
   for (const c of cards) {
     if (!c?.front) continue;
     const kind = CARD_KINDS.includes(c.kind) ? c.kind : 'rule';
     const genus = kind === 'genus' && ['der', 'die', 'das'].includes(c.genus) ? c.genus : null;
-    const id = `gc_${chapterNo}_${Buffer.from(String(c.front)).toString('base64url').slice(0, 40)}`;
+    // ⚠️ ID에 사용자를 넣지 않으면 둘이 같은 장을 배울 때 뒤에 온 사람 카드가
+    //    ON CONFLICT DO NOTHING으로 조용히 사라집니다
+    const id = `gc_u${userId}_${chapterNo}_${Buffer.from(String(c.front)).toString('base64url').slice(0, 40)}`;
     try {
       const r = await pool.query(
-        `INSERT INTO german_cards (id, kind, front, back, note, genus, chapter_no)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
-        [id, kind, c.front, c.back || '', c.note || '', genus, chapterNo]);
+        `INSERT INTO german_cards (id, user_id, kind, front, back, note, genus, chapter_no)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+        [id, userId, kind, c.front, c.back || '', c.note || '', genus, chapterNo]);
       if (r.rowCount > 0) n++;
     } catch { /* skip */ }
   }
   return n;
 }
 
-export async function getDueCards(limit = 12) {
+export async function getDueCards(userId, limit = 12) {
   const pool = getPool(); if (!pool) return [];
   await ensureGermanTables();
   const r = await pool.query(
-    `SELECT * FROM german_cards WHERE due_at <= NOW() ORDER BY due_at ASC LIMIT $1`, [limit]);
+    `SELECT * FROM german_cards WHERE user_id=$1 AND due_at <= NOW()
+     ORDER BY due_at ASC LIMIT $2`, [userId, limit]);
   return r.rows.map(c => ({
     id: c.id, kind: c.kind, front: c.front, back: c.back, note: c.note,
     genus: c.genus, tier: cardTier(c), chapterNo: c.chapter_no,
@@ -731,10 +787,12 @@ export async function getDueCards(limit = 12) {
  * 복습 카드 채점. quality는 0~3 (0 잊음 · 1 겨우 · 2 무난 · 3 쉽게).
  * wrote=true 면 노트에 손으로 써서 맞힌 경우 — 간격을 더 길게 줍니다.
  */
-export async function reviewCard(cardId, quality, wrote = false) {
+export async function reviewCard(userId, cardId, quality, wrote = false) {
   const pool = getPool(); if (!pool) return null;
   await ensureGermanTables();
-  const r = await pool.query(`SELECT * FROM german_cards WHERE id=$1`, [cardId]);
+  // 남의 카드를 채점하지 못하게 사용자까지 걸어 조회합니다
+  const r = await pool.query(
+    `SELECT * FROM german_cards WHERE id=$1 AND user_id=$2`, [cardId, userId]);
   const card = r.rows[0];
   if (!card) return null;
   const q = Math.max(0, Math.min(3, Number(quality) || 0));
@@ -745,14 +803,15 @@ export async function reviewCard(cardId, quality, wrote = false) {
   const next = sm2(card, q, { wrote: wroteIt });
   await pool.query(
     `UPDATE german_cards SET ease=$1, interval_days=$2, repetitions=$3, lapses=$4,
-       due_at=NOW() + ($5 || ' days')::interval, last_result=$6 WHERE id=$7`,
+       due_at=NOW() + ($5 || ' days')::interval, last_result=$6
+     WHERE id=$7 AND user_id=$8`,
     [next.ease, next.interval_days, next.repetitions, next.lapses,
-     String(next.interval_days), q < 2 ? 'again' : (wroteIt ? 'wrote' : 'ok'), cardId]);
+     String(next.interval_days), q < 2 ? 'again' : (wroteIt ? 'wrote' : 'ok'), cardId, userId]);
 
   const tierAfter = cardTier({ ...card, ...next });
   // 🎮 XP는 맞혔을 때만. 노트 보너스는 작게 — 진짜 보상은 '복습이 줄어드는 것'입니다
   const gained = q >= 2
-    ? await grantXp(
+    ? await grantXp(userId,
         (tierAfter !== tierBefore ? 25 : 10) + (wroteIt ? 5 : 0),
         tierAfter !== tierBefore ? `카드 승급 · ${TIERS[tierAfter]?.label || tierAfter}`
                                  : (wroteIt ? '노트에 쓰고 복습' : '복습 정답'),
@@ -786,10 +845,11 @@ export function cardTier(card) {
 }
 
 /** 도감 — 카드를 종류·등급별로 모아 봅니다 */
-export async function getCollection() {
+export async function getCollection(userId) {
   const pool = getPool(); if (!pool) return { kinds: {}, total: 0 };
   await ensureGermanTables();
-  const r = await pool.query(`SELECT * FROM german_cards ORDER BY chapter_no, created_at`);
+  const r = await pool.query(
+    `SELECT * FROM german_cards WHERE user_id=$1 ORDER BY chapter_no, created_at`, [userId]);
   const kinds = {};
   for (const c of r.rows) {
     (kinds[c.kind] ||= []).push({
@@ -802,13 +862,13 @@ export async function getCollection() {
 
 /* ── XP ── */
 
-export async function grantXp(amount, reason, ref = null) {
+export async function grantXp(userId, amount, reason, ref = null) {
   const pool = getPool(); if (!pool) return 0;
   await ensureGermanTables();
   try {
     const r = await pool.query(
-      `INSERT INTO german_xp (amount, reason, ref) VALUES ($1,$2,$3)
-       ON CONFLICT (ref) DO NOTHING RETURNING amount`, [amount, reason, ref]);
+      `INSERT INTO german_xp (user_id, amount, reason, ref) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (user_id, ref) DO NOTHING RETURNING amount`, [userId, amount, reason, ref]);
     return r.rows[0]?.amount || 0;
   } catch { return 0; }
 }
@@ -823,27 +883,31 @@ export function levelFromXp(xp) {
            progress: Math.round(((xp - base) / need) * 100) };
 }
 
-export async function getXpState() {
+export async function getXpState(userId) {
   const pool = getPool(); if (!pool) return levelFromXp(0);
   await ensureGermanTables();
-  const r = await pool.query(`SELECT COALESCE(SUM(amount),0)::int AS xp FROM german_xp`);
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(amount),0)::int AS xp FROM german_xp WHERE user_id=$1`, [userId]);
   return levelFromXp(r.rows[0]?.xp || 0);
 }
 
-export async function getGermanStats() {
+export async function getGermanStats(userId) {
   const pool = getPool();
   if (!pool) return { done: 0, total: CHAPTERS.length, cards: 0, due: 0, activeDays7: 0, goethe: {} };
   await ensureGermanTables();
   const [done, cards, due, active] = await Promise.all([
-    pool.query(`SELECT COUNT(DISTINCT chapter_no)::int AS n FROM german_lessons WHERE status='done'`),
-    pool.query(`SELECT COUNT(*)::int AS n FROM german_cards`),
-    pool.query(`SELECT COUNT(*)::int AS n FROM german_cards WHERE due_at <= NOW()`),
+    pool.query(`SELECT COUNT(DISTINCT chapter_no)::int AS n FROM german_lessons
+                WHERE user_id=$1 AND status='done'`, [userId]),
+    pool.query(`SELECT COUNT(*)::int AS n FROM german_cards WHERE user_id=$1`, [userId]),
+    pool.query(`SELECT COUNT(*)::int AS n FROM german_cards
+                WHERE user_id=$1 AND due_at <= NOW()`, [userId]),
     pool.query(`SELECT COUNT(DISTINCT DATE(created_at))::int AS n FROM german_xp
-                WHERE created_at > NOW() - INTERVAL '7 days'`),
+                WHERE user_id=$1 AND created_at > NOW() - INTERVAL '7 days'`, [userId]),
   ]);
   // Goethe 등급대별 진도 — 압박이 아니라 진도 감각용입니다
   const doneNos = (await pool.query(
-    `SELECT DISTINCT chapter_no FROM german_lessons WHERE status='done'`)).rows.map(x => x.chapter_no);
+    `SELECT DISTINCT chapter_no FROM german_lessons
+      WHERE user_id=$1 AND status='done'`, [userId])).rows.map(x => x.chapter_no);
   const goethe = {};
   for (const c of CHAPTERS) {
     const g = (goethe[c.goethe] ||= { done: 0, total: 0 });

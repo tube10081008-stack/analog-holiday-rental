@@ -49,20 +49,27 @@ export async function ensureNotebookTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_nb_open ON notebook_tasks(course, status, issued_at);
     CREATE INDEX IF NOT EXISTS idx_nb_ch ON notebook_tasks(course, chapter_no);
+
+    -- 👥 사용자 분리. 기존 과제는 전부 주인(id=1)의 것입니다
+    ALTER TABLE notebook_tasks ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1;
+    CREATE INDEX IF NOT EXISTS idx_nb_user ON notebook_tasks(user_id, course, status);
   `).catch(() => { tablesReady = null; });
   await tablesReady;
 }
 
-/** 결정적 ID — 같은 장의 같은 과제를 두 번 발행해도 늘어나지 않습니다 */
-const taskId = (course, chapterNo, kind, spec) =>
-  `nb_${course}_${chapterNo}_${kind}_${Buffer.from(String(spec)).toString('base64url').slice(0, 24)}`;
+/**
+ * 결정적 ID — 같은 장의 같은 과제를 두 번 발행해도 늘어나지 않습니다.
+ * ⚠️ 사용자를 빼면 둘이 같은 장을 할 때 뒤에 온 사람 과제가 조용히 사라집니다.
+ */
+const taskId = (userId, course, chapterNo, kind, spec) =>
+  `nb_u${userId}_${course}_${chapterNo}_${kind}_${Buffer.from(String(spec)).toString('base64url').slice(0, 24)}`;
 
 /**
  * 쓰기 과제를 발행합니다 (장을 마칠 때 호출).
  * @param chapter { no, sec, title }
  * @param tasks   [{ kind, spec, target }]
  */
-export async function issueTasks(course, chapter, tasks) {
+export async function issueTasks(userId, course, chapter, tasks) {
   const pool = getPool();
   if (!pool || !Array.isArray(tasks) || !tasks.length) return 0;
   await ensureNotebookTables();
@@ -72,12 +79,12 @@ export async function issueTasks(course, chapter, tasks) {
     if (!spec) continue;
     const kind = TASK_KINDS[t.kind] ? t.kind : 'table';
     const target = Math.max(1, Math.min(9, Number(t.target) || 1));
-    const id = taskId(course, chapter.no, kind, spec);
+    const id = taskId(userId, course, chapter.no, kind, spec);
     try {
       const r = await pool.query(
-        `INSERT INTO notebook_tasks (id, course, chapter_no, sec, title, kind, spec, target)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
-        [id, course, chapter.no, chapter.sec || String(chapter.no), chapter.title || '',
+        `INSERT INTO notebook_tasks (id, user_id, course, chapter_no, sec, title, kind, spec, target)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING`,
+        [id, userId, course, chapter.no, chapter.sec || String(chapter.no), chapter.title || '',
          kind, spec.slice(0, 400), target]);
       if (r.rowCount > 0) n++;
     } catch { /* skip */ }
@@ -86,13 +93,13 @@ export async function issueTasks(course, chapter, tasks) {
 }
 
 /** 아직 안 쓴 과제 — 다음 접속 때 "하셨어요?"로 회수합니다 */
-export async function getPending(course, limit = 5) {
+export async function getPending(userId, course, limit = 5) {
   const pool = getPool(); if (!pool) return [];
   await ensureNotebookTables();
   const r = await pool.query(
     `SELECT id, chapter_no, sec, title, kind, spec, target, done, issued_at
-     FROM notebook_tasks WHERE course=$1 AND status='open'
-     ORDER BY issued_at ASC LIMIT $2`, [course, limit]);
+     FROM notebook_tasks WHERE user_id=$1 AND course=$2 AND status='open'
+     ORDER BY issued_at ASC LIMIT $3`, [userId, course, limit]);
   return r.rows.map(row => ({
     id: row.id, chapterNo: row.chapter_no, sec: row.sec, title: row.title,
     kind: row.kind, spec: row.spec, target: row.target, done: row.done,
@@ -105,7 +112,7 @@ export async function getPending(course, limit = 5) {
  * 한 회차 썼다고 표시합니다. target에 도달하면 자동으로 닫힙니다.
  * @returns { done, target, closed } 또는 null
  */
-export async function bumpTask(taskIdStr, by = 1) {
+export async function bumpTask(userId, taskIdStr, by = 1) {
   const pool = getPool(); if (!pool) return null;
   await ensureNotebookTables();
   const r = await pool.query(
@@ -113,30 +120,31 @@ export async function bumpTask(taskIdStr, by = 1) {
         SET done = LEAST(target, done + $1),
             status  = CASE WHEN done + $1 >= target THEN 'done' ELSE status END,
             done_at = CASE WHEN done + $1 >= target THEN NOW() ELSE done_at END
-      WHERE id = $2 AND status = 'open'
+      WHERE id = $2 AND user_id = $3 AND status = 'open'
       RETURNING done, target, status`,
-    [Math.max(1, Number(by) || 1), taskIdStr]);
+    [Math.max(1, Number(by) || 1), taskIdStr, userId]);
   const row = r.rows[0];
   if (!row) return null;
   return { done: row.done, target: row.target, closed: row.status === 'done' };
 }
 
 /** 과제를 통째로 접습니다 ("이건 안 할래요") */
-export async function dismissTask(taskIdStr) {
+export async function dismissTask(userId, taskIdStr) {
   const pool = getPool(); if (!pool) return false;
   await ensureNotebookTables();
   const r = await pool.query(
     `UPDATE notebook_tasks SET status='skipped', done_at=NOW()
-      WHERE id=$1 AND status='open'`, [taskIdStr]);
+      WHERE id=$1 AND user_id=$2 AND status='open'`, [taskIdStr, userId]);
   return r.rowCount > 0;
 }
 
 /** 노트 페이지 사진 — 채점용이 아니라 보관용입니다 (OCR 하지 않습니다) */
-export async function attachPhoto(taskIdStr, url) {
+export async function attachPhoto(userId, taskIdStr, url) {
   const pool = getPool(); if (!pool || !url) return false;
   await ensureNotebookTables();
   const r = await pool.query(
-    `UPDATE notebook_tasks SET photo_url=$1 WHERE id=$2`, [String(url).slice(0, 900), taskIdStr]);
+    `UPDATE notebook_tasks SET photo_url=$1 WHERE id=$2 AND user_id=$3`,
+    [String(url).slice(0, 900), taskIdStr, userId]);
   return r.rowCount > 0;
 }
 
@@ -144,12 +152,12 @@ export async function attachPhoto(taskIdStr, url) {
  * '내 노트' 색인 — 앱이 종이 노트의 목차가 됩니다.
  * 장 번호(=교재 절 번호)로 묶어 돌려줍니다.
  */
-export async function getIndex(course, limit = 200) {
+export async function getIndex(userId, course, limit = 200) {
   const pool = getPool(); if (!pool) return { pages: [], stats: { open: 0, done: 0 } };
   await ensureNotebookTables();
   const r = await pool.query(
-    `SELECT * FROM notebook_tasks WHERE course=$1 ORDER BY chapter_no, issued_at LIMIT $2`,
-    [course, limit]);
+    `SELECT * FROM notebook_tasks WHERE user_id=$1 AND course=$2
+     ORDER BY chapter_no, issued_at LIMIT $3`, [userId, course, limit]);
   const byChapter = new Map();
   let open = 0, done = 0;
   for (const t of r.rows) {
@@ -176,7 +184,7 @@ export async function getIndex(course, limit = 200) {
  * 못 찾으면 현재 장을 가리킵니다. 그 장에 실제로 쓴 기록이 있을 때만 돌려줍니다 —
  * 안 쓴 페이지를 펴라고 하면 헛걸음이니까요.
  */
-export async function pointerFor(course, chapters, currentChapterNo, gapConcept) {
+export async function pointerFor(userId, course, chapters, currentChapterNo, gapConcept) {
   const pool = getPool(); if (!pool) return null;
   await ensureNotebookTables();
 
@@ -198,8 +206,8 @@ export async function pointerFor(course, chapters, currentChapterNo, gapConcept)
   const r = await pool.query(
     `SELECT sec, title, SUM(done)::int AS written
        FROM notebook_tasks
-      WHERE course=$1 AND chapter_no=$2 AND done > 0
-      GROUP BY sec, title LIMIT 1`, [course, target.no]);
+      WHERE user_id=$1 AND course=$2 AND chapter_no=$3 AND done > 0
+      GROUP BY sec, title LIMIT 1`, [userId, course, target.no]);
   const row = r.rows[0];
   if (!row) return null;
   return {
@@ -239,14 +247,16 @@ export function deriveTasks(course, chapter, lesson = {}) {
 }
 
 /** 한 장에 열려 있는 과제 수 — 오답 과제가 쌓이는 걸 막는 데 씁니다 */
-export async function countOpen(course, chapterNo, kind = null) {
+export async function countOpen(userId, course, chapterNo, kind = null) {
   const pool = getPool(); if (!pool) return 0;
   await ensureNotebookTables();
   const r = kind
     ? await pool.query(`SELECT COUNT(*)::int AS n FROM notebook_tasks
-         WHERE course=$1 AND chapter_no=$2 AND kind=$3 AND status='open'`, [course, chapterNo, kind])
+         WHERE user_id=$1 AND course=$2 AND chapter_no=$3 AND kind=$4 AND status='open'`,
+         [userId, course, chapterNo, kind])
     : await pool.query(`SELECT COUNT(*)::int AS n FROM notebook_tasks
-         WHERE course=$1 AND chapter_no=$2 AND status='open'`, [course, chapterNo]);
+         WHERE user_id=$1 AND course=$2 AND chapter_no=$3 AND status='open'`,
+         [userId, course, chapterNo]);
   return r.rows[0]?.n || 0;
 }
 
