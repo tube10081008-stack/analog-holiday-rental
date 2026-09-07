@@ -335,7 +335,17 @@ export function pickScene(level, sceneIndex) {
  * 실패(0~1)하면 간격을 처음으로 되돌리고 난이도 계수를 낮춥니다.
  * 성공하면 1일 → 6일 → 이전간격×ease 로 지수 확대합니다.
  */
-export function sm2(card, quality) {
+/**
+ * SM-2 간격 반복. quality는 0~3 스케일입니다.
+ *   0 완전히 잊음 · 1 겨우 떠올림 · 2 무난히 · 3 쉽게
+ *
+ * opts.wrote — 손으로 노트에 써서 맞힌 경우.
+ * 머릿속으로 떠올리는 것(재인)보다 써내는 것(산출)이 어렵고, 어려운 인출이 더 오래 갑니다.
+ * 그래서 간격을 1.5배 주고 ease 보너스도 함께 줍니다.
+ * 보상이 포인트가 아니라 '복습이 실제로 줄어드는 것'이라 억지스럽지 않습니다.
+ * (인자를 안 넘기면 기존 호출과 완전히 동일하게 동작합니다)
+ */
+export function sm2(card, quality, opts = {}) {
   let ease = Number(card.ease) || 2.5;
   let interval = Number(card.interval_days) || 0;
   let reps = Number(card.repetitions) || 0;
@@ -352,6 +362,11 @@ export function sm2(card, quality) {
     else if (reps === 2) interval = 6;
     else interval = Math.round(interval * ease * 10) / 10;
     if (quality === 3) ease = Math.min(3.0, ease + 0.15);
+    // ✍️ 손으로 써서 맞혔으면 쉽게 떠올린 것과 같은 ease 보너스 + 간격 1.5배
+    if (opts.wrote) {
+      if (quality < 3) ease = Math.min(3.0, ease + 0.15);
+      interval = Math.round(interval * 1.5 * 10) / 10;
+    }
     interval = Math.min(interval, 365);
   }
   return {
