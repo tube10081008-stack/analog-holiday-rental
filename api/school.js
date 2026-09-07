@@ -59,6 +59,9 @@ export default async function handler(req, res) {
     if (query.course === "math" || body0.course === "math") {
       return await handleMath(req, res, query, body0);
     }
+    if (query.course === "german" || body0.course === "german") {
+      return await handleGerman(req, res, query, body0);
+    }
 
     await ensureSchoolTable();
     await ensurePredictionsTable();
@@ -578,4 +581,187 @@ async function handleLeaderboard(res) {
   const unranked = rows.filter(r => r.resolved === 0);
 
   return json(res, 200, { ok: true, ranked, unranked });
+}
+
+/* ═══════════════════════════════════════════════════
+   🇩🇪 레나의 독일어 노트 (?course=german)
+   Hobby 함수 한도 12개 때문에 이 엔드포인트를 공유합니다.
+   ═══════════════════════════════════════════════════ */
+async function handleGerman(req, res, query, body) {
+  const GE = await import("./_lib/german.js");
+  await GE.ensureGermanTables();
+  const action = query.action || body.action || "today";
+
+  if (req.method === "GET") {
+    if (action === "today") {
+      let lesson = await GE.getOpenLesson();
+      let created = false;
+      if (!lesson) {
+        const profile = await GE.getProfile();
+        const chapter = GE.getChapter(profile?.chapter_index ?? 0);
+        const gaps = await GE.getGaps(6);
+        const priorContext = gaps.length
+          ? `## 지금까지 관찰된 약한 곳 (설명에 자연스럽게 녹여 주세요)\n${
+              gaps.map(g => `- ${g.concept} (${g.times}회)`).join('\n')}`
+          : '## 아직 파악된 약점이 없습니다. 설명하면서 관찰해 주세요.';
+        const gen = await GE.generateLesson(chapter, priorContext);
+        lesson = await GE.createLesson(chapter, gen);
+        created = true;
+      }
+      const problems = parseJ(lesson.problems) || [];
+      return json(res, 200, {
+        ok: true, created,
+        lesson: {
+          id: lesson.id, chapterNo: lesson.chapter_no, unit: lesson.unit,
+          title: lesson.title, deTitle: lesson.de_title,
+          intro: lesson.intro, concept: lesson.concept, aside: lesson.aside || '',
+          warmup: parseJ(lesson.warmup) || [],
+          walkthrough: parseJ(lesson.walkthrough) || {},
+          // 정답·함정은 내려보내지 않습니다. 힌트는 눌러서 볼 수 있으니 함께 보냅니다.
+          problems: problems.map(p => ({
+            question: p.question, level: p.level || 'trap', hint: p.hint || '',
+          })),
+          problemCount: problems.length,
+          summary: parseJ(lesson.summary) || [],
+          step: lesson.step, turns: parseJ(lesson.turns) || [],
+        },
+        stats: await GE.getGermanStats(), xp: await GE.getXpState(),
+        gaps: await GE.getGaps(5),
+      });
+    }
+
+    if (action === "map") {
+      const done = await GE.getDoneChapters();
+      const profile = await GE.getProfile();
+      const currentNo = GE.getChapter(profile?.chapter_index ?? 0).no;
+      return json(res, 200, {
+        ok: true, units: GE.UNITS, currentNo,
+        chapters: GE.CHAPTERS.map(c => ({
+          ...c, done: done.includes(c.no), current: c.no === currentNo,
+        })),
+        stats: await GE.getGermanStats(), xp: await GE.getXpState(),
+      });
+    }
+
+    if (action === "review") {
+      return json(res, 200, {
+        ok: true, cards: await GE.getDueCards(12), tiers: GE.TIERS,
+        stats: await GE.getGermanStats(), xp: await GE.getXpState(),
+      });
+    }
+
+    if (action === "collection") {
+      const col = await GE.getCollection();
+      return json(res, 200, { ok: true, ...col, tiers: GE.TIERS,
+        stats: await GE.getGermanStats(), xp: await GE.getXpState() });
+    }
+
+    if (action === "gaps") {
+      return json(res, 200, { ok: true, gaps: await GE.getGaps(20),
+        stats: await GE.getGermanStats() });
+    }
+
+    return json(res, 400, { ok: false, message: "알 수 없는 action" });
+  }
+
+  if (req.method === "POST") {
+    if (body.action === "step") {
+      await GE.advanceStep(body.lessonId, Number(body.step) || 0, null);
+      return json(res, 200, { ok: true });
+    }
+
+    // 🙋 "여기가 이해 안 돼요"
+    if (body.action === "deepen") {
+      const lesson = await GE.getOpenLesson();
+      if (!lesson || lesson.id !== body.lessonId) {
+        return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
+      }
+      const wt = parseJ(lesson.walkthrough) || {};
+      const SECTIONS = {
+        intro:   { label: '도입 — 이 규칙이 왜 생겼나', text: lesson.intro },
+        warmup:  { label: '준비운동 — 되짚을 것', text: (parseJ(lesson.warmup) || [])
+                     .map(w => `${w.concept}\n${w.refresher}`).join('\n\n') },
+        concept: { label: '핵심 설명', text: lesson.concept },
+        walkthrough: { label: '문장 해부', text: [wt.problem,
+                        ...(wt.steps || []).map(s => `${s.what} — ${s.why}`), wt.recap]
+                        .filter(Boolean).join('\n') },
+      };
+      const sec = SECTIONS[body.section] || SECTIONS.concept;
+      const out = await GE.explainMore({
+        chapter: GE.CHAPTERS.find(c => c.no === lesson.chapter_no) || { unit: lesson.unit,
+          title: lesson.title, de: lesson.de_title, sec: '', no: lesson.chapter_no },
+        sectionLabel: sec.label, sectionText: sec.text, question: body.question,
+        askedBefore: Array.isArray(body.askedBefore) ? body.askedBefore.slice(-3) : [],
+      });
+      if (out.parseError) return json(res, 200, { ok: true, parseError: true, message: out.explanation });
+      return json(res, 200, { ok: true, ...out });
+    }
+
+    if (body.action === "answer") {
+      const lesson = await GE.getOpenLesson();
+      if (!lesson || lesson.id !== body.lessonId) {
+        return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
+      }
+      const problems = parseJ(lesson.problems) || [];
+      const idx = Number(body.problemIndex) || 0;
+      const problem = problems[idx];
+      if (!problem) return json(res, 400, { ok: false, message: "문제를 찾을 수 없습니다." });
+
+      const chapter = GE.CHAPTERS.find(c => c.no === lesson.chapter_no)
+        || { unit: lesson.unit, title: lesson.title, de: lesson.de_title, sec: '', no: lesson.chapter_no };
+      const graded = await GE.gradeAnswer({
+        chapter, problem, userAnswer: body.answer, history: parseJ(lesson.turns) || [],
+      });
+      if (graded.parseError) return json(res, 200, { ok: true, parseError: true, message: graded.feedback });
+
+      await GE.advanceStep(lesson.id, Number(body.step) || lesson.step,
+        { role: 'user', content: String(body.answer).slice(0, 800),
+          correct: graded.correct, at: new Date().toISOString() });
+
+      if (graded.gapConcept) await GE.recordGap(lesson.chapter_no, graded.gapConcept, graded.gapPatch);
+
+      // 🎮 XP는 '맞혔을 때'만. 제출 횟수로는 얻을 수 없습니다
+      const xpGained = graded.correct
+        ? await GE.grantXp(20, '확인문제 정답', `${lesson.id}_p${idx}`)
+        : 0;
+
+      return json(res, 200, {
+        ok: true, graded, xpGained, answer: problem.answer, xp: await GE.getXpState(),
+      });
+    }
+
+    if (body.action === "complete") {
+      const lesson = await GE.getOpenLesson();
+      if (!lesson || lesson.id !== body.lessonId) {
+        return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
+      }
+      const cardsAdded = await GE.addCards(parseJ(lesson.cards) || [], lesson.chapter_no);
+      await GE.completeLesson(lesson.id);
+      const xpGained = await GE.grantXp(60, `${lesson.title} 수료`, `${lesson.id}_done`);
+      return json(res, 200, {
+        ok: true, cardsAdded, xpGained,
+        stats: await GE.getGermanStats(), xp: await GE.getXpState(),
+      });
+    }
+
+    if (body.action === "review") {
+      const out = await GE.reviewCard(body.cardId, Number(body.quality));
+      if (!out) return json(res, 404, { ok: false, message: "카드를 찾을 수 없습니다." });
+      return json(res, 200, { ok: true, ...out, xp: await GE.getXpState() });
+    }
+
+    // 목차에서 다른 장으로 점프
+    if (body.action === "jump") {
+      const idx = GE.CHAPTERS.findIndex(c => c.no === Number(body.chapterNo));
+      if (idx < 0) return json(res, 400, { ok: false, message: "그런 장이 없습니다." });
+      const open = await GE.getOpenLesson();
+      if (open) await GE.completeLesson(open.id).catch(() => {});
+      await GE.setChapterIndex(idx);
+      return json(res, 200, { ok: true });
+    }
+
+    return json(res, 400, { ok: false, message: "알 수 없는 action" });
+  }
+
+  return json(res, 405, { ok: false, message: "지원하지 않는 메서드" });
 }
