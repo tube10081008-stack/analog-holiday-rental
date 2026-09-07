@@ -535,3 +535,106 @@ body {
   .flash-word { font-size: 25px; }
   .q-btn { font-size: 12px; padding: 10px 2px; }
 }
+
+/* ═══════════════════════════════════════════════
+   📓 노트 연동
+   ═══════════════════════════════════════════════ */
+
+/* 복습 — 뒤집기 전 '노트에 쓰세요' 신호 */
+.write-cue {
+  display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;
+  padding: 13px 15px; border-radius: 12px;
+  border: 1px dashed var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent);
+}
+.write-cue b { font-size: 14px; color: var(--blue-soft); }
+.write-cue span { font-size: 12px; color: var(--faint); line-height: 1.65; }
+.wrote-badge {
+  margin-bottom: 10px; padding: 7px 12px; border-radius: 999px; text-align: center;
+  font-size: 11.5px; color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 11%, transparent);
+}
+.promo-toast.wrote { border-color: var(--mint); color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 12%, transparent); }
+.promo-toast.wrote span { display: block; margin-top: 3px; font-size: 11px; color: var(--faint); }
+
+/* 오답 → 내 노트 가리키기 */
+.nb-pointer {
+  margin-top: 14px; padding: 14px 16px; border-radius: 12px;
+  border: 1px solid var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent);
+}
+.nb-pointer .nb-lab {
+  display: block; font-size: 13.5px; font-weight: 700; color: var(--blue-soft); margin-bottom: 5px;
+}
+.nb-pointer p { font-size: 13px; line-height: 1.8; color: var(--dim); }
+
+/* 과제 회수 배너 */
+.nb-recall {
+  margin: 14px 0 4px; padding: 14px 16px; border-radius: 12px;
+  border: 1px dashed var(--line); background: var(--bg-2);
+}
+.nb-recall-head {
+  display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--blue-soft);
+  font-weight: 600; margin-bottom: 7px;
+}
+.nb-recall-head i { font-style: normal; color: var(--faint); font-weight: 400; margin-left: 4px; }
+.nb-icon { flex: 0 0 auto; font-size: 13px; color: var(--faint); }
+.nb-spec { font-size: 13.5px; line-height: 1.8; color: var(--paper); }
+.nb-prog { display: flex; align-items: center; gap: 4px; margin-top: 9px; }
+.nb-prog i {
+  width: 16px; height: 5px; border-radius: 3px; background: var(--line); display: block;
+}
+.nb-prog i.on { background: var(--mint); }
+.nb-prog span { margin-left: 4px; font-size: 11px; color: var(--faint); }
+.nb-acts { display: flex; gap: 7px; margin-top: 12px; }
+.btn-nb-done, .btn-nb-skip {
+  padding: 8px 13px; border-radius: 9px; font-family: var(--sans); font-size: 12.5px;
+  cursor: pointer; transition: border-color .15s, opacity .15s;
+}
+.btn-nb-done {
+  flex: 1; background: color-mix(in srgb, var(--mint) 13%, transparent);
+  border: 1px solid var(--mint); color: var(--mint); font-weight: 600;
+}
+.btn-nb-skip { background: transparent; border: 1px solid var(--line); color: var(--faint); }
+.btn-nb-done:disabled, .btn-nb-skip:disabled { opacity: .45; }
+
+/* 수료 화면 — 발행된 과제 */
+.nb-issued {
+  margin-top: 16px; padding: 14px 16px; border-radius: 12px; text-align: left;
+  border: 1px solid var(--line); background: var(--bg-2);
+}
+.nb-issued .nb-lab {
+  display: block; font-size: 11px; letter-spacing: .1em; font-weight: 600;
+  color: var(--blue-soft); margin-bottom: 9px;
+}
+.nb-issued-row { display: flex; gap: 8px; margin-bottom: 7px; }
+.nb-issued-spec { font-size: 13px; line-height: 1.75; color: var(--paper); }
+.nb-issued-spec i { font-style: normal; color: var(--mint); font-size: 11.5px; margin-left: 5px; }
+
+/* 내 노트 색인 */
+.nb-page {
+  margin-bottom: 10px; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--bg-2);
+}
+.nb-page.done { opacity: .58; }
+.nb-page-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px; }
+.nb-sec {
+  flex: 0 0 auto; font-family: var(--serif); font-size: 15px; font-weight: 700;
+  color: var(--blue-soft); font-variant-numeric: tabular-nums;
+}
+.nb-title { flex: 1; min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-count { flex: 0 0 auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.nb-task {
+  display: flex; align-items: flex-start; gap: 8px; padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.nb-task.skipped { opacity: .45; text-decoration: line-through; }
+.nb-task-spec { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.7; color: var(--dim); }
+.nb-task-n {
+  flex: 0 0 auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums;
+}
+.nb-task.done .nb-task-n { color: var(--mint); }
+
+/* 탭이 6개라 좁은 화면에서 가로 스크롤을 허용합니다 */
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { flex: 0 0 auto; white-space: nowrap; }

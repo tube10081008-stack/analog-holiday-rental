@@ -313,6 +313,7 @@ export async function ensureGermanTables() {
       problems JSONB NOT NULL DEFAULT '[]',
       summary JSONB NOT NULL DEFAULT '[]',
       cards JSONB NOT NULL DEFAULT '[]',
+      notebook JSONB NOT NULL DEFAULT '[]',
       aside TEXT NOT NULL DEFAULT '',
       step INTEGER NOT NULL DEFAULT 0,
       turns JSONB NOT NULL DEFAULT '[]',
@@ -355,6 +356,10 @@ export async function ensureGermanTables() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_gx_ref ON german_xp(ref) WHERE ref IS NOT NULL;
     INSERT INTO german_profile (id, chapter_index) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;
+
+    -- 노트 연동으로 추가된 칼럼. 이미 만들어진 테이블에도 붙도록 ALTER로 둡니다
+    -- (CREATE TABLE IF NOT EXISTS는 기존 테이블에 칼럼을 더해주지 않습니다)
+    ALTER TABLE german_lessons ADD COLUMN IF NOT EXISTS notebook JSONB NOT NULL DEFAULT '[]';
   `).catch(() => { tablesReady = null; });
   await tablesReady;
 }
@@ -425,6 +430,16 @@ term(형태·용어) / meaning(뜻·쓰임) / caution(주의할 점)
 - "vocab" — 어휘·숙어. front는 독일어, back은 뜻
 각 카드: kind / front / back / note(언제 쓰는지 한 줄) / genus(성 카드만, 아니면 null)
 
+### notebook (노트 과제 1~2개)
+수업을 마치고 **종이 노트에 펜으로** 할 일입니다. 앱은 이 노트를 읽지 않습니다.
+그러니 "앱에 입력하세요"가 아니라 **손으로 쓰는 행위 자체가 목적**인 과제를 내세요.
+- 구체적이고 작게. "필기하세요" 같은 막연한 지시는 아무도 안 합니다.
+- 표가 나온 장이면 **표를 옮겨 그리고 가린 채 채우기**가 가장 좋습니다.
+- 각 과제: kind / spec(무엇을 할지 한 문장, 읽고 바로 실행 가능하게) / target(반복 횟수 1~5)
+- kind는 다음 중 하나: "table"(표 채우기) · "conjugation"(변화형 쓰기) ·
+  "sentences"(예문 옮기기) · "vocab"(단어 쓰기)
+- 5분~10분 안에 끝나는 분량으로. 부담되면 안 합니다.
+
 ### aside (곁가지 이야기 · 선택)
 어원, 다른 언어와의 비교, 독일어를 쓰는 사람들의 실제 습관 등 재미있는 여담.
 200~400자. 없으면 빈 문자열. 시험에 안 나와도 괜찮습니다 — 이 학습자는 재미로 배웁니다.
@@ -437,6 +452,7 @@ term(형태·용어) / meaning(뜻·쓰임) / caution(주의할 점)
  "problems":[{"question":"...","answer":"...","level":"easy","trap":"","prereq":"...","hint":"..."}],
  "summary":[{"term":"...","meaning":"...","caution":"..."}],
  "cards":[{"kind":"genus","front":"...","back":"...","note":"...","genus":"der"}],
+ "notebook":[{"kind":"table","spec":"...","target":3}],
  "aside":"..."}`;
 
   const valid = (d) => !!(d?.intro && d?.concept && d?.problems?.length);
@@ -606,12 +622,13 @@ export async function createLesson(chapter, gen) {
   await pool.query(
     `INSERT INTO german_lessons
        (id, chapter_no, unit, title, de_title, intro, warmup, concept, walkthrough,
-        problems, summary, cards, aside)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        problems, summary, cards, notebook, aside)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
     [id, chapter.no, chapter.unit, chapter.title, chapter.de, gen.intro,
      JSON.stringify(gen.warmup || []), gen.concept,
      JSON.stringify(gen.walkthrough || {}), JSON.stringify(gen.problems),
-     JSON.stringify(gen.summary || []), JSON.stringify(gen.cards || []), gen.aside || '']
+     JSON.stringify(gen.summary || []), JSON.stringify(gen.cards || []),
+     JSON.stringify(gen.notebook || []), gen.aside || '']
   );
   const r = await pool.query(`SELECT * FROM german_lessons WHERE id=$1`, [id]);
   return r.rows[0];
@@ -693,27 +710,45 @@ export async function getDueCards(limit = 12) {
   }));
 }
 
-export async function reviewCard(cardId, quality) {
+/**
+ * 복습 카드 채점. quality는 0~3 (0 잊음 · 1 겨우 · 2 무난 · 3 쉽게).
+ * wrote=true 면 노트에 손으로 써서 맞힌 경우 — 간격을 더 길게 줍니다.
+ */
+export async function reviewCard(cardId, quality, wrote = false) {
   const pool = getPool(); if (!pool) return null;
+  await ensureGermanTables();
   const r = await pool.query(`SELECT * FROM german_cards WHERE id=$1`, [cardId]);
   const card = r.rows[0];
   if (!card) return null;
+  const q = Math.max(0, Math.min(3, Number(quality) || 0));
+  const wroteIt = !!wrote && q >= 2;   // 틀린 걸 썼다고 보너스를 주지는 않습니다
+
   const tierBefore = cardTier(card);
-  const next = sm2(card, quality);
+  const plain = sm2(card, q);                      // 노트 없이 풀었다면 받았을 간격
+  const next = sm2(card, q, { wrote: wroteIt });
   await pool.query(
     `UPDATE german_cards SET ease=$1, interval_days=$2, repetitions=$3, lapses=$4,
        due_at=NOW() + ($5 || ' days')::interval, last_result=$6 WHERE id=$7`,
     [next.ease, next.interval_days, next.repetitions, next.lapses,
-     String(next.interval_days), quality >= 3 ? 'ok' : 'again', cardId]);
+     String(next.interval_days), q < 2 ? 'again' : (wroteIt ? 'wrote' : 'ok'), cardId]);
+
   const tierAfter = cardTier({ ...card, ...next });
-  // 🎮 XP는 '맞혔을 때'만. 등급이 올라가면 보너스
-  const gained = quality >= 3
-    ? await grantXp(tierAfter !== tierBefore ? 25 : 10,
-        tierAfter !== tierBefore ? `카드 승급 · ${TIERS[tierAfter]?.label || tierAfter}` : '복습 정답',
+  // 🎮 XP는 맞혔을 때만. 노트 보너스는 작게 — 진짜 보상은 '복습이 줄어드는 것'입니다
+  const gained = q >= 2
+    ? await grantXp(
+        (tierAfter !== tierBefore ? 25 : 10) + (wroteIt ? 5 : 0),
+        tierAfter !== tierBefore ? `카드 승급 · ${TIERS[tierAfter]?.label || tierAfter}`
+                                 : (wroteIt ? '노트에 쓰고 복습' : '복습 정답'),
         `${cardId}_${Date.now()}`)
     : 0;
-  return { tierBefore, tierAfter, promoted: tierAfter !== tierBefore, xpGained: gained,
-           nextInDays: next.interval_days };
+
+  return {
+    tierBefore, tierAfter, promoted: tierAfter !== tierBefore, xpGained: gained,
+    nextInDays: next.interval_days,
+    wrote: wroteIt,
+    // 손으로 써서 며칠을 벌었는지 — 이게 학습자가 보는 실제 보상입니다
+    daysGained: wroteIt ? Math.round((next.interval_days - plain.interval_days) * 10) / 10 : 0,
+  };
 }
 
 export const TIERS = {

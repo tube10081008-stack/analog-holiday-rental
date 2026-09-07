@@ -583,13 +583,21 @@ async function handleLeaderboard(res) {
   return json(res, 200, { ok: true, ranked, unranked });
 }
 
+/** 레슨 행에서 장 메타(번호·절번호·제목)를 꺼냅니다 */
+function chapterMetaOf(GE, lesson) {
+  return GE.CHAPTERS.find(c => c.no === lesson.chapter_no)
+    || { no: lesson.chapter_no, sec: String(lesson.chapter_no), title: lesson.title };
+}
+
 /* ═══════════════════════════════════════════════════
    🇩🇪 레나의 독일어 노트 (?course=german)
    Hobby 함수 한도 12개 때문에 이 엔드포인트를 공유합니다.
    ═══════════════════════════════════════════════════ */
 async function handleGerman(req, res, query, body) {
   const GE = await import("./_lib/german.js");
+  const NB = await import("./_lib/notebook.js");
   await GE.ensureGermanTables();
+  await NB.ensureNotebookTables();
   const action = query.action || body.action || "today";
 
   if (req.method === "GET") {
@@ -627,7 +635,17 @@ async function handleGerman(req, res, query, body) {
         },
         stats: await GE.getGermanStats(), xp: await GE.getXpState(),
         gaps: await GE.getGaps(5),
+        // 📓 지난 장에서 낸 쓰기 과제 중 아직 안 한 것 — 진도를 막지는 않습니다
+        notebookPending: await NB.getPending('german', 3),
       });
+    }
+
+    if (action === "notebook") {
+      const idx = await NB.getIndex('german');
+      // idx.stats(노트 진행)와 과정 통계가 이름이 겹치므로 분리해서 내려보냅니다
+      return json(res, 200, { ok: true, pages: idx.pages, notebookStats: idx.stats,
+        kinds: NB.TASK_KINDS,
+        stats: await GE.getGermanStats(), xp: await GE.getXpState() });
     }
 
     if (action === "map") {
@@ -720,13 +738,26 @@ async function handleGerman(req, res, query, body) {
 
       if (graded.gapConcept) await GE.recordGap(lesson.chapter_no, graded.gapConcept, graded.gapPatch);
 
+      // 📓 틀렸으면 새 설명 대신 본인이 쓴 노트를 가리킵니다 (쓴 기록이 있을 때만)
+      let notebookPointer = null;
+      if (!graded.correct) {
+        notebookPointer = await NB.pointerFor('german', GE.CHAPTERS, lesson.chapter_no, graded.gapConcept);
+        // 오답 정리 과제. 한 장에서 세 문제를 다 틀려도 과제가 쌓이지 않게 한 개로 막습니다
+        const already = await NB.countOpen('german', lesson.chapter_no, 'errors');
+        if (already === 0) {
+          await NB.issueTasks('german', chapterMetaOf(GE, lesson),
+            [NB.errorTask(problem.answer)]).catch(() => {});
+        }
+      }
+
       // 🎮 XP는 '맞혔을 때'만. 제출 횟수로는 얻을 수 없습니다
       const xpGained = graded.correct
         ? await GE.grantXp(20, '확인문제 정답', `${lesson.id}_p${idx}`)
         : 0;
 
       return json(res, 200, {
-        ok: true, graded, xpGained, answer: problem.answer, xp: await GE.getXpState(),
+        ok: true, graded, xpGained, answer: problem.answer, notebookPointer,
+        xp: await GE.getXpState(),
       });
     }
 
@@ -736,18 +767,47 @@ async function handleGerman(req, res, query, body) {
         return json(res, 409, { ok: false, message: "진행 중인 수업이 아닙니다." });
       }
       const cardsAdded = await GE.addCards(parseJ(lesson.cards) || [], lesson.chapter_no);
+
+      // 📓 쓰기 과제 발행 — 레나가 지정한 게 없으면 수업 내용에서 만들어냅니다
+      const chapterMeta = chapterMetaOf(GE, lesson);
+      let nbTasks = parseJ(lesson.notebook) || [];
+      if (!nbTasks.length) {
+        nbTasks = NB.deriveTasks('german', chapterMeta, {
+          concept: lesson.concept, walkthrough: parseJ(lesson.walkthrough) || {},
+          cards: parseJ(lesson.cards) || [],
+        });
+      }
+      const notebookIssued = await NB.issueTasks('german', chapterMeta, nbTasks);
+
       await GE.completeLesson(lesson.id);
       const xpGained = await GE.grantXp(60, `${lesson.title} 수료`, `${lesson.id}_done`);
       return json(res, 200, {
-        ok: true, cardsAdded, xpGained,
+        ok: true, cardsAdded, xpGained, notebookIssued,
+        notebookTasks: await NB.getPending('german', 4),
         stats: await GE.getGermanStats(), xp: await GE.getXpState(),
       });
     }
 
     if (body.action === "review") {
-      const out = await GE.reviewCard(body.cardId, Number(body.quality));
+      // ✍️ wrote=true — 노트에 손으로 써서 맞힌 경우. 간격을 더 길게 받습니다
+      const out = await GE.reviewCard(body.cardId, Number(body.quality), !!body.wrote);
       if (!out) return json(res, 404, { ok: false, message: "카드를 찾을 수 없습니다." });
       return json(res, 200, { ok: true, ...out, xp: await GE.getXpState() });
+    }
+
+    // 📓 노트 과제 회수 — 자가신고입니다. 검증하지 않습니다
+    if (body.action === "notebook-done") {
+      const out = await NB.bumpTask(body.taskId, Number(body.by) || 1);
+      if (!out) return json(res, 404, { ok: false, message: "그런 과제가 없거나 이미 끝났습니다." });
+      // 다 채웠을 때만 작게 보상합니다 (과잉정당화를 피해 XP는 낮게)
+      const xpGained = out.closed
+        ? await GE.grantXp(15, '노트 과제 완료', `nb_${body.taskId}`) : 0;
+      return json(res, 200, { ok: true, ...out, xpGained, xp: await GE.getXpState() });
+    }
+
+    if (body.action === "notebook-skip") {
+      const ok = await NB.dismissTask(body.taskId);
+      return json(res, 200, { ok, message: ok ? '접었습니다.' : '이미 처리된 과제입니다.' });
     }
 
     // 목차에서 다른 장으로 점프
