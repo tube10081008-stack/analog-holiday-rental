@@ -1,22 +1,23 @@
 /* ═══════════════════════════════════════════════
-   클로이의 수학 노트
-   컨셉: 밤에 펼친 모눈 공책. 짙은 잉크블루 위 형광펜 자국.
+   한세진의 회계 노트
+   컨셉: 장부. 짙은 초록 잉크에 크림빛 종이, 붉은 첨삭 자국.
+   구조는 독일어 노트와 같습니다 — 같은 흐름을 배우는 데 두 번 적응할 이유가 없어서요.
    ═══════════════════════════════════════════════ */
 
 :root {
-  --bg: #0F1620;
-  --bg-2: #16202C;
-  --card: #1A2634;
-  --line: #27374A;
-  --paper: #E6EDF5;
-  --dim: #9EB0C4;
-  --faint: #62768D;
-  --blue: #4A90D9;
-  --blue-soft: #79B4EE;
-  --mint: #4FC3A1;
-  --amber: #E8B44A;
-  --pink: #E07A9B;
-  --serif: 'Gowun Batang', serif;
+  --bg: #121815;
+  --bg-2: #19211D;
+  --card: #1E2823;
+  --line: #2F3D36;
+  --paper: #ECE7DC;
+  --dim: #ADA79A;
+  --faint: #736E63;
+  --blue: #6FBF8E;          /* 장부 초록 — 표지의 색 */
+  --blue-soft: #9AD9B4;
+  --mint: #6FB894;
+  --amber: #D9A441;
+  --pink: #D96C6C;          /* 붉은 첨삭 */
+  --serif: 'Cormorant Garamond', 'Gowun Batang', serif;
   --sans: 'IBM Plex Sans KR', -apple-system, sans-serif;
   --r: 14px;
 }
@@ -27,9 +28,9 @@ body {
   font-family: var(--sans);
   color: var(--paper); min-height: 100dvh; line-height: 1.7;
   background:
-    linear-gradient(rgba(39,55,74,.30) 1px, transparent 1px) 0 0 / 100% 30px,
-    linear-gradient(90deg, rgba(39,55,74,.30) 1px, transparent 1px) 0 0 / 30px 100%,
-    radial-gradient(900px 400px at 82% -8%, rgba(74,144,217,.16), transparent 62%),
+    linear-gradient(rgba(47,61,54,.34) 1px, transparent 1px) 0 0 / 100% 30px,
+    linear-gradient(90deg, rgba(47,61,54,.34) 1px, transparent 1px) 0 0 / 30px 100%,
+    radial-gradient(900px 400px at 82% -8%, rgba(111,191,142,.13), transparent 62%),
     var(--bg);
 }
 
@@ -115,20 +116,20 @@ body {
   font-family: var(--sans); font-size: 13px; letter-spacing: .08em; color: var(--blue-soft);
   margin: 22px 0 8px; font-weight: 600;
 }
-.chloe {
+.lena {
   display: flex; align-items: center; gap: 9px; margin-bottom: 14px;
   padding-bottom: 12px; border-bottom: 1px dashed var(--line);
 }
-.chloe-face {
+.lena-face {
   width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
   background: linear-gradient(135deg, var(--blue), var(--mint)); font-size: 17px; flex-shrink: 0;
 }
-.chloe-name { font-size: 13px; font-weight: 600; }
-.chloe-role { font-size: 11px; color: var(--faint); }
+.lena-name { font-size: 13px; font-weight: 600; }
+.lena-role { font-size: 11px; color: var(--faint); }
 
 /* 문제 */
 .q-box {
-  border-left: 3px solid var(--amber); background: rgba(232,180,74,.07);
+  border-left: 3px solid var(--amber); background: rgba(217,164,65,.07);
   padding: 16px 18px; border-radius: 0 12px 12px 0; margin: 6px 0 16px;
   font-family: var(--serif); font-size: 17px; line-height: 1.9; white-space: pre-wrap;
 }
@@ -144,7 +145,7 @@ body {
 }
 .answer-box .lab { font-family: var(--sans); font-size: 10.5px; letter-spacing: .14em; color: var(--faint); display: block; margin-bottom: 4px; }
 .gap-box {
-  border: 1px solid var(--pink); background: rgba(224,122,155,.08);
+  border: 1px solid var(--pink); background: rgba(217,108,108,.08);
   border-radius: 12px; padding: 14px 16px; margin-top: 14px;
 }
 .gap-box .lab { font-size: 11px; letter-spacing: .1em; color: var(--pink); font-weight: 600; }
@@ -159,9 +160,9 @@ body {
   border-radius: 12px;
   border: 1px solid var(--line);
   background:
-    linear-gradient(rgba(39,55,74,.45) 1px, transparent 1px) 0 0 / 100% 24px,
-    linear-gradient(90deg, rgba(39,55,74,.45) 1px, transparent 1px) 0 0 / 24px 100%,
-    #131C27;
+    linear-gradient(rgba(51,56,70,.42) 1px, transparent 1px) 0 0 / 100% 24px,
+    linear-gradient(90deg, rgba(51,56,70,.42) 1px, transparent 1px) 0 0 / 24px 100%,
+    #191C24;
 }
 .board {
   display: inline-block; min-width: 100%;
@@ -183,7 +184,7 @@ body {
   position: sticky; right: 0; float: right; bottom: 0;
   display: block; margin: -22px 0 0; padding: 2px 8px;
   font-family: var(--sans); font-size: 10px; letter-spacing: .04em;
-  color: var(--blue-soft); background: rgba(19,28,39,.92);
+  color: var(--blue-soft); background: rgba(25,28,36,.92);
   border: 1px solid var(--line); border-radius: 999px;
   pointer-events: none; transition: opacity .2s;
 }
@@ -195,7 +196,7 @@ body {
 
 /* 준비운동 — 오늘 필요한 선수 개념 */
 .warm-item {
-  border-left: 3px solid var(--blue); background: rgba(74,144,217,.06);
+  border-left: 3px solid var(--blue); background: rgba(111,191,142,.06);
   border-radius: 0 12px 12px 0; padding: 14px 16px; margin-bottom: 12px;
 }
 .warm-head {
@@ -204,7 +205,7 @@ body {
 }
 .warm-no {
   flex: 0 0 auto; margin-top: 4px; width: 20px; height: 20px; border-radius: 50%;
-  background: var(--blue); color: #0F1620; font-family: var(--sans);
+  background: var(--blue); color: #14161C; font-family: var(--sans);
   font-size: 11px; font-weight: 700; display: grid; place-items: center;
 }
 .warm-item .prose { font-size: 15px; line-height: 1.95; }
@@ -229,7 +230,7 @@ body {
 }
 .wt-why {
   margin-top: 7px; font-size: 13.5px; line-height: 1.85; color: var(--dim);
-  background: rgba(79,195,161,.07); border-radius: 9px; padding: 9px 12px;
+  background: rgba(111,184,148,.07); border-radius: 9px; padding: 9px 12px;
 }
 .wt-why span {
   display: inline-block; font-size: 10.5px; letter-spacing: .1em; font-weight: 700;
@@ -237,7 +238,7 @@ body {
 }
 .wt-recap {
   border: 1px dashed var(--mint); border-radius: 12px;
-  padding: 13px 16px; margin-top: 6px; background: rgba(79,195,161,.05);
+  padding: 13px 16px; margin-top: 6px; background: rgba(111,184,148,.05);
 }
 .wt-recap .lab {
   display: block; font-size: 10.5px; letter-spacing: .14em;
@@ -250,13 +251,13 @@ body {
   display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
   font-size: 10px; letter-spacing: .06em; font-weight: 700; vertical-align: middle;
 }
-.lv-easy    { background: rgba(79,195,161,.16); color: var(--mint); }
-.lv-trap    { background: rgba(232,180,74,.16); color: var(--amber); }
-.lv-connect { background: rgba(121,180,238,.16); color: var(--blue-soft); }
+.lv-easy    { background: rgba(111,184,148,.16); color: var(--mint); }
+.lv-trap    { background: rgba(217,164,65,.16); color: var(--amber); }
+.lv-connect { background: rgba(222,192,138,.16); color: var(--blue-soft); }
 
 /* 힌트 */
 .hint-box {
-  margin-top: 10px; border-left: 3px solid var(--blue); background: rgba(74,144,217,.07);
+  margin-top: 10px; border-left: 3px solid var(--blue); background: rgba(111,191,142,.07);
   border-radius: 0 11px 11px 0; padding: 12px 15px;
   font-family: var(--serif); font-size: 15px; line-height: 1.9; white-space: pre-wrap;
 }
@@ -277,7 +278,7 @@ body {
 .stuck-panel[hidden] { display: none; }
 .deepen-box {
   margin-top: 14px; border-left: 3px solid var(--blue-soft);
-  background: rgba(121,180,238,.06); border-radius: 0 12px 12px 0; padding: 15px 17px;
+  background: rgba(222,192,138,.06); border-radius: 0 12px 12px 0; padding: 15px 17px;
 }
 .deepen-box .lab {
   display: block; font-size: 10.5px; letter-spacing: .12em;
@@ -295,7 +296,7 @@ body {
 /* 곁가지 이야기 */
 .aside-box {
   margin-top: 20px; border: 1px solid var(--line); border-radius: 12px;
-  padding: 14px 16px; background: rgba(79,195,161,.04);
+  padding: 14px 16px; background: rgba(111,184,148,.04);
 }
 .aside-box .lab {
   display: block; font-size: 11px; letter-spacing: .1em;
@@ -331,8 +332,8 @@ body {
   display: flex; align-items: center; gap: 11px; padding: 11px 14px; margin-bottom: 6px;
   border-radius: 11px; background: var(--bg-2); border: 1.5px solid var(--line); cursor: pointer;
 }
-.chap-row.done { border-color: var(--mint); background: rgba(79,195,161,.07); }
-.chap-row.current { border-color: var(--amber); background: rgba(232,180,74,.09); }
+.chap-row.done { border-color: var(--mint); background: rgba(111,184,148,.07); }
+.chap-row.current { border-color: var(--amber); background: rgba(217,164,65,.09); }
 .chap-no { font-family: var(--serif); font-size: 14px; color: var(--faint); width: 24px; flex-shrink: 0; }
 .chap-row.done .chap-no { color: var(--mint); }
 .chap-row.current .chap-no { color: var(--amber); }
@@ -381,18 +382,161 @@ body {
   .prose { font-size: 15.5px; }
 }
 
-
 /* ═══════════════════════════════════════════════
-   📓 노트 연동 · 🤝 함께
-   독일어 노트에서 검증된 장치를 그대로 옮겨왔습니다.
-   같은 흐름을 배우는 데 교실마다 다시 적응할 이유가 없어서
-   클래스 이름과 동작을 일부러 똑같이 뒀습니다.
+   독일어 전용
    ═══════════════════════════════════════════════ */
+
+/* 성(Genus) 색상 — der/die/das를 색으로 기억하는 오래된 요령 */
+.g-der { --gc: #6FA8DC; }   /* 남성 — 파랑 */
+.g-die { --gc: #D96C8A; }   /* 여성 — 빨강 */
+.g-das { --gc: #6FB894; }   /* 중성 — 초록 */
+.genus-slot {
+  display: block; margin: 0 auto 12px; width: 74px; padding: 6px 0;
+  border-radius: 999px; text-align: center;
+  font-family: var(--serif); font-size: 19px; font-weight: 700;
+  color: var(--gc, var(--faint)); border: 1.5px solid var(--gc, var(--line));
+  background: color-mix(in srgb, var(--gc, transparent) 12%, transparent);
+}
+.genus-slot.unknown {
+  color: var(--faint); border-style: dashed; border-color: var(--line); background: none;
+}
+.genus-dot {
+  flex: 0 0 auto; padding: 1px 7px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; color: var(--gc, var(--faint));
+  border: 1px solid var(--gc, var(--line));
+  background: color-mix(in srgb, var(--gc, transparent) 12%, transparent);
+}
+
+/* 움라우트 자판 */
+.uml-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 9px; }
+.uml {
+  min-width: 34px; padding: 6px 9px; border-radius: 9px;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--paper);
+  font-family: var(--serif); font-size: 16px; cursor: pointer; transition: border-color .15s;
+}
+.uml:hover { border-color: var(--blue); color: var(--blue-soft); }
+.uml-hint { font-size: 11px; color: var(--faint); margin-left: 2px; }
+
+/* 발음 듣기 */
+.btn-say {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+  padding: 3px 10px; border-radius: 999px;
+  background: transparent; border: 1px solid var(--line); color: var(--dim);
+  font-family: var(--sans); font-size: 11px; cursor: pointer; vertical-align: middle;
+  transition: border-color .15s, color .15s;
+}
+.btn-say:hover { border-color: var(--blue); color: var(--blue-soft); }
+
+.answer-box.corrected { border-left: 3px solid var(--mint); }
+
+/* 목차 */
+.goethe-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
+.goethe-chip {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 5px 12px; border-radius: 999px;
+  background: var(--bg-2); border: 1px solid var(--line);
+}
+.goethe-chip b { font-family: var(--serif); font-size: 14px; color: var(--blue-soft); }
+.goethe-chip span { font-size: 11.5px; color: var(--faint); }
+
+.unit-n { font-size: 11px; color: var(--faint); font-family: var(--sans); font-weight: 400; }
+
+.ch-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 11px 13px; margin-bottom: 6px; text-align: left;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 11px;
+  color: var(--paper); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.ch-row:hover { border-color: var(--blue); }
+.ch-row.done { opacity: .58; }
+.ch-row.cur { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 9%, var(--bg-2)); }
+.ch-sec {
+  flex: 0 0 auto; min-width: 34px; font-family: var(--sans);
+  font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums;
+}
+.ch-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ch-de {
+  font-family: var(--serif); font-size: 15px; font-weight: 600; color: var(--paper);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ch-ko { font-size: 11.5px; color: var(--dim); }
+.ch-g {
+  flex: 0 0 auto; padding: 1px 7px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; color: var(--faint); border: 1px solid var(--line);
+}
+.ch-mark { flex: 0 0 auto; width: 14px; text-align: center; font-size: 12px; color: var(--blue-soft); }
+
+/* 복습 카드 */
+.card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.kind-tag {
+  padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600;
+  color: var(--blue-soft); background: color-mix(in srgb, var(--blue) 13%, transparent);
+}
+.tier-tag { font-size: 11px; font-weight: 600; }
+.card-count { margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+.flash { text-align: center; padding: 26px 8px 22px; }
+.flash-word { font-family: var(--serif); font-size: 30px; font-weight: 600; line-height: 1.35; }
+.flash-back {
+  margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line);
+  font-size: 16px; line-height: 1.85; color: var(--paper); white-space: pre-wrap;
+}
+.flash-note { margin-top: 8px; font-size: 12.5px; color: var(--faint); }
+
+.quality-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.q-btn {
+  display: flex; flex-direction: column; gap: 3px; padding: 11px 4px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 11px;
+  color: var(--paper); font-family: var(--sans); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: border-color .15s;
+}
+.q-btn span { font-size: 10px; font-weight: 400; color: var(--faint); line-height: 1.4; }
+.q-btn:disabled { opacity: .45; }
+.q-again:hover { border-color: var(--pink); }
+.q-hard:hover  { border-color: var(--amber); }
+.q-good:hover  { border-color: var(--mint); }
+.q-easy:hover  { border-color: var(--blue); }
+
 .promo-toast {
   margin-bottom: 12px; padding: 10px 14px; border-radius: 11px;
   background: color-mix(in srgb, var(--blue) 14%, transparent);
   border: 1px solid var(--blue); font-size: 13.5px; color: var(--blue-soft);
 }
+
+/* 도감 */
+.col-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.col-card {
+  display: flex; align-items: center; gap: 7px; padding: 10px 12px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 11px;
+  min-width: 0;
+}
+.col-card.tier-master { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 8%, var(--bg-2)); }
+.col-card.tier-mature { border-color: color-mix(in srgb, var(--mint) 45%, var(--line)); }
+.col-card.tier-new    { opacity: .6; border-style: dashed; }
+.col-front {
+  flex: 1; min-width: 0; font-family: var(--serif); font-size: 15px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.col-tier { flex: 0 0 auto; font-size: 9.5px; font-weight: 600; }
+
+/* 약한 곳 */
+.gap-row {
+  display: flex; align-items: center; gap: 11px; padding: 11px 13px; margin-bottom: 6px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 11px;
+}
+.gap-times {
+  flex: 0 0 auto; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  color: var(--pink); background: color-mix(in srgb, var(--pink) 13%, transparent);
+}
+.gap-name { font-size: 14.5px; }
+
+/* 5개 탭이라 좁은 화면에서 눌림 방지 */
+@media (max-width: 420px) {
+  .tabs button { font-size: 12px; padding: 10px 4px; }
+  .flash-word { font-size: 25px; }
+  .q-btn { font-size: 12px; padding: 10px 2px; }
+}
+
 /* ═══════════════════════════════════════════════
    📓 노트 연동
    ═══════════════════════════════════════════════ */
@@ -413,6 +557,7 @@ body {
 .promo-toast.wrote { border-color: var(--mint); color: var(--mint);
   background: color-mix(in srgb, var(--mint) 12%, transparent); }
 .promo-toast.wrote span { display: block; margin-top: 3px; font-size: 11px; color: var(--faint); }
+
 /* 오답 → 내 노트 가리키기 */
 .nb-pointer {
   margin-top: 14px; padding: 14px 16px; border-radius: 12px;
@@ -422,6 +567,7 @@ body {
   display: block; font-size: 13.5px; font-weight: 700; color: var(--blue-soft); margin-bottom: 5px;
 }
 .nb-pointer p { font-size: 13px; line-height: 1.8; color: var(--dim); }
+
 /* 과제 회수 배너 */
 .nb-recall {
   margin: 14px 0 4px; padding: 14px 16px; border-radius: 12px;
@@ -451,6 +597,7 @@ body {
 }
 .btn-nb-skip { background: transparent; border: 1px solid var(--line); color: var(--faint); }
 .btn-nb-done:disabled, .btn-nb-skip:disabled { opacity: .45; }
+
 /* 수료 화면 — 발행된 과제 */
 .nb-issued {
   margin-top: 16px; padding: 14px 16px; border-radius: 12px; text-align: left;
@@ -463,6 +610,7 @@ body {
 .nb-issued-row { display: flex; gap: 8px; margin-bottom: 7px; }
 .nb-issued-spec { font-size: 13px; line-height: 1.75; color: var(--paper); }
 .nb-issued-spec i { font-style: normal; color: var(--mint); font-size: 11.5px; margin-left: 5px; }
+
 /* 내 노트 색인 */
 .nb-page {
   margin-bottom: 10px; padding: 12px 14px; border-radius: 12px;
@@ -486,6 +634,42 @@ body {
   flex: 0 0 auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums;
 }
 .nb-task.done .nb-task-n { color: var(--mint); }
+
+/* 탭이 6개라 좁은 화면에서 가로 스크롤을 허용합니다 */
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { flex: 0 0 auto; white-space: nowrap; }
+
+/* 📖 낱말 각주 — 사전 없이 문제를 풀 수 있게 */
+.gloss {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: -6px 0 14px; padding: 11px 13px;
+  border-radius: 11px; border: 1px solid var(--line); background: var(--bg-2);
+}
+.gloss-lab {
+  flex: 0 0 auto; font-size: 10px; letter-spacing: .12em; font-weight: 600;
+  color: var(--faint); margin-right: 2px;
+}
+.gloss-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  background: transparent; border: 1px solid var(--line);
+  transition: border-color .15s, background .15s;
+}
+.gloss-chip:hover, .gloss-chip:active {
+  border-color: var(--blue); background: color-mix(in srgb, var(--blue) 9%, transparent);
+}
+.gloss-chip b {
+  font-family: var(--serif); font-size: 14.5px; font-weight: 700; color: var(--paper);
+}
+.gloss-chip span { font-size: 11.5px; color: var(--dim); }
+
+/* ═══════════════════════════════════════════════
+   🤝 함께 공부하기
+   ═══════════════════════════════════════════════ */
+.gate-hint { font-size: 11.5px; color: var(--faint); margin-top: 10px; line-height: 1.7; }
+.brand-sub b { color: var(--blue-soft); font-weight: 600; }
+
 /* 친구 답 비교 */
 .peer-wait {
   margin-top: 16px; padding: 12px 15px; border-radius: 11px;
@@ -524,6 +708,7 @@ body {
 .peer-no { color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, transparent); }
 .peer-ok span, .peer-no span { display: block; margin-top: 5px; color: var(--dim); }
 .peer-no span.hint { color: var(--faint); font-size: 11.5px; }
+
 /* 함께 탭 */
 .tg-row {
   display: flex; align-items: center; gap: 10px; padding: 11px 13px; margin-bottom: 6px;
@@ -538,6 +723,7 @@ body {
 }
 .tg-done { flex: 0 0 auto; font-size: 12px; color: var(--blue-soft); font-variant-numeric: tabular-nums; }
 .tg-seen { flex: 0 0 auto; font-size: 10.5px; color: var(--faint); }
+
 .note-in, .note-out {
   padding: 12px 14px; margin-bottom: 8px; border-radius: 11px;
   border: 1px solid var(--line); background: var(--bg-2);
@@ -554,6 +740,7 @@ body {
   margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
   font-size: 12px; color: var(--dim); line-height: 1.7;
 }
+
 .invite-row { display: flex; gap: 7px; margin-bottom: 10px; }
 .invite-row .field { flex: 1; }
 .invite-row .btn-primary { flex: 0 0 auto; width: auto; padding: 0 16px; margin: 0; }
@@ -568,3 +755,66 @@ body {
   letter-spacing: .06em; color: var(--blue-soft);
 }
 .invite-key .btn-ghost { width: auto; padding: 5px 12px; margin: 0; font-size: 12px; }
+
+/* 🗣 한글 발음 표기 */
+.gloss-chip i {
+  font-style: normal; font-size: 11px; color: var(--mint);
+  font-family: var(--sans); letter-spacing: -.01em;
+}
+.read-line {
+  margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line);
+  font-family: var(--sans); font-size: 12.5px; color: var(--mint); line-height: 1.7;
+}
+.flash-read {
+  margin-top: 6px; font-family: var(--sans); font-size: 13.5px; color: var(--mint);
+}
+.col-front i {
+  display: block; font-style: normal; font-family: var(--sans);
+  font-size: 10.5px; color: var(--mint); font-weight: 400; margin-top: 1px;
+}
+
+/* 🔊 재생 중 표시 — 누르자마자 반응이 보여야 합니다 */
+.btn-say.on {
+  border-color: var(--mint); color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 12%, transparent);
+}
+.gloss-chip.on {
+  border-color: var(--mint); background: color-mix(in srgb, var(--mint) 12%, transparent);
+}
+
+
+/* ═══════════════════════════════════════════════
+   회계 전용 — 계정과목의 '자리'
+   독일어의 성(der/die/das)이 색으로 구분됐듯이,
+   계정과목은 재무제표 어디에 앉는지가 색입니다.
+   이름을 외우는 것보다 자리를 아는 게 오래 갑니다.
+   ═══════════════════════════════════════════════ */
+.s-asset  { --gc: #6FA8DC; }   /* 자산 — 파랑 (가진 것) */
+.s-liab   { --gc: #D98A5A; }   /* 부채 — 주황 (남의 돈) */
+.s-equity { --gc: #C9A227; }   /* 자본 — 금색 (내 돈) */
+.s-rev    { --gc: #6FB894; }   /* 수익 — 초록 (+) */
+.s-exp    { --gc: #D96C6C; }   /* 비용 — 빨강 (−) */
+
+/* 도감의 자리별 머리말 */
+.unit-head.side-head { border-left: 3px solid var(--gc, var(--blue)); padding-left: 9px; }
+.unit-head .unit-sub {
+  font-family: var(--sans); font-size: 10.5px; font-weight: 400;
+  color: var(--faint); letter-spacing: 0; margin-left: 8px;
+}
+
+/* 분개 입력 도우미 — 움라우트 자판 자리를 그대로 씁니다 */
+.uml { font-family: var(--sans); font-size: 12.5px; }
+
+/* 판서 안의 숫자는 자릿수가 어긋나면 표가 아니라 글자 더미가 됩니다.
+   고정폭 숫자를 강제해 둡니다 (일부 글꼴은 기본이 비례폭 숫자입니다) */
+.board { font-variant-numeric: tabular-nums; }
+
+/* 용어 각주는 회계에선 눌러도 소리가 안 나므로 버튼이 아니라 칩입니다 */
+.gloss-chip { cursor: default; }
+
+/* 계정과목 이름은 자르면 안 됩니다.
+   '용역매출'이 '용역…'이 되면 어느 계정인지 알 수 없고, 도감의 존재 이유가 사라집니다.
+   (독일어는 낱말이 짧아 한 줄로 끊어도 됐지만 '현금및현금성자산' 같은 이름이 흔합니다) */
+.col-front { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
+.col-card { align-items: flex-start; }
+.col-card .genus-dot, .col-card .col-tier { margin-top: 2px; }

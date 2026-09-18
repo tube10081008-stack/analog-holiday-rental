@@ -82,6 +82,7 @@ async function loadTab(tab) {
   $('#view').innerHTML = `<div class="loading">불러오는 중…</div>`;
   try {
     if (tab === 'today') await renderToday();
+    else if (tab === 'notebook') await renderNotebook();
     else if (tab === 'review') await renderReview();
     else if (tab === 'stage') await renderStages();
     else if (tab === 'collection') await renderCollection();
@@ -135,9 +136,78 @@ const TIER_META = {
 const tierBadge = (t) => `<span class="tier-badge ${TIER_META[t]?.cls || ''}">${TIER_META[t]?.label || t}</span>`;
 
 /* ═══ 오늘의 수업 ═══ */
+/* 📓 노트 연동 — 한자는 읽는 것과 쓰는 것이 다른 기억입니다 */
+let pendingTasks = [];
+let wroteThis = false;   // 이번 카드를 손으로 썼는지
+
+function renderNbBadge(n) {
+  const b = $('#nbBadge'); if (!b) return;
+  if (n > 0) { b.textContent = n; b.hidden = false; } else b.hidden = true;
+}
+
+/** 지난 장면에서 낸 손글씨 과제 회수 — 진도를 막지 않고 물어만 봅니다 */
+function pendingBanner() {
+  if (!pendingTasks.length) return '';
+  const t = pendingTasks[0];
+  return `
+    <div class="nb-recall" data-task="${esc(t.id)}">
+      <div class="nb-recall-head">
+        <span class="nb-icon">${esc(t.icon || '📓')}</span>
+        <span>노트 ${esc(t.sec)} · ${esc(t.label || '')}
+          ${t.daysAgo > 0 ? `<i>${t.daysAgo}일 전에 낸 과제예요</i>` : ''}</span>
+      </div>
+      <p class="nb-spec">${esc(t.spec)}</p>
+      ${t.target > 1 ? `<div class="nb-prog">${
+        Array.from({ length: t.target }, (_, i) =>
+          `<i class="${i < t.done ? 'on' : ''}"></i>`).join('')} <span>${t.done}/${t.target}</span></div>` : ''}
+      <div class="nb-acts">
+        <button class="btn-nb-done" data-act="done">✍️ ${t.target > 1 ? '한 번 더 썼어요' : '썼어요'}</button>
+        <button class="btn-nb-skip" data-act="skip">이건 접을게요</button>
+      </div>
+    </div>`;
+}
+
+function wirePending(redraw) {
+  const box = document.querySelector('.nb-recall');
+  if (!box) return;
+  box.addEventListener('click', async (e) => {
+    const act = e.target.dataset?.act;
+    if (!act) return;
+    const taskId = box.dataset.task;
+    box.querySelectorAll('button').forEach(b => (b.disabled = true));
+    try {
+      if (act === 'skip') {
+        await post({ action: 'notebook-skip', taskId });
+        pendingTasks = pendingTasks.slice(1);
+      } else {
+        const r = await post({ action: 'notebook-done', taskId });
+        if (r.xp) renderXp(r.xp);
+        if (r.closed) pendingTasks = pendingTasks.slice(1);
+        else pendingTasks[0] = { ...pendingTasks[0], done: r.done };
+      }
+      renderNbBadge(pendingTasks.length);
+      redraw();
+    } catch (err) {
+      box.querySelectorAll('button').forEach(b => (b.disabled = false));
+      console.error(err);
+    }
+  });
+}
+
 async function renderToday() {
   const d = await api('?action=today');
   today = d; speechHeard = '';
+  pendingTasks = d.notebookPending || [];
+  drawToday(d);
+}
+
+/**
+ * 받아둔 응답으로 오늘 화면을 그립니다.
+ * 노트 과제를 처리한 뒤에도 **다시 받아오지 않고** 이 함수만 다시 부릅니다 —
+ * renderToday를 부르면 작성 중이던 답안이 통째로 날아갑니다.
+ */
+function drawToday(d) {
+  renderNbBadge(pendingTasks.length);
   renderStats(d.stats, d.cardStats, d.profile.level);
   if (d.xp) renderXp(d.xp);
   const S = d.session;
@@ -172,6 +242,7 @@ async function renderToday() {
     <div class="card fade-in">
       <p class="card-eyebrow">今天的场景 · 오늘의 장면</p>
       <h2>${esc(S.sceneCn)}<span class="ko">${esc(S.scene)}</span></h2>
+      ${pendingBanner()}
       ${d.priorFocus ? `<p class="hint">📌 지난 수업 지적: ${esc(d.priorFocus)}</p>` : ''}
       <div class="dialogue">${dlg}</div>
       <button class="btn-ghost" onclick="__speak(${JSON.stringify((S.dialogue || []).map(l => l.hanzi).join('。')).replace(/"/g, '&quot;')}, 0.8)">전체 듣기 ▶</button>
@@ -230,6 +301,51 @@ async function renderToday() {
       await post({ action: 'skip' });
       loadTab('today');
     }));
+  wirePending(() => drawToday(today));
+}
+
+/* ═══ 📓 내 노트 — 앱이 종이 노트의 색인이 됩니다 ═══ */
+async function renderNotebook() {
+  const d = await api('?action=notebook');
+  renderStats(null, null, today?.profile?.level);
+  if (d.xp) renderXp(d.xp);
+  if (!d.pages.length) {
+    $('#view').innerHTML = `<div class="empty">📓 아직 노트에 쓸 것이 없습니다.<br/>
+      수업을 마칠 때마다 손으로 쓸 한자가 여기 쌓입니다.<br/><br/>
+      <span style="font-size:12px">읽을 수 있는 것과 쓸 수 있는 것은 다른 기억이에요.</span></div>`;
+    return;
+  }
+  const { open = 0, done = 0 } = d.notebookStats || {};
+  $('#view').innerHTML = `
+    <div class="card fade-in">
+      <p class="card-eyebrow">我的笔记 · 내 노트</p>
+      <p class="hint">앱은 노트를 읽지 않아요. 대신 <b>무엇이 적혀 있어야 하는지</b>를 알고 있습니다.
+        페이지 번호는 <b>레벨-장면</b>이에요 — 노트 상단에 그 번호만 적어두세요.</p>
+      ${d.pages.map(p => {
+        // 접은 과제는 분모에서 뺍니다 — 안 하기로 한 걸 '남은 것'으로 세면 안 되니까요
+        const live = p.tasks.filter(t => t.status !== 'skipped');
+        const total = live.reduce((a, t) => a + t.target, 0);
+        const did = live.reduce((a, t) => a + t.done, 0);
+        const allDone = p.tasks.every(t => t.status !== 'open');
+        return `
+        <div class="nb-page ${allDone ? 'done' : ''}">
+          <div class="nb-page-head">
+            <span class="nb-sec">${esc(p.sec)}</span>
+            <span class="nb-title">${esc(p.title)}</span>
+            <span class="nb-count">${total ? `${did}/${total}` : '접음'}</span>
+          </div>
+          ${p.tasks.map(t => `
+            <div class="nb-task ${t.status}">
+              <span class="nb-icon">${esc(t.icon || '·')}</span>
+              <span class="nb-task-spec">${esc(t.spec)}</span>
+              <span class="nb-task-n">${t.status === 'skipped' ? '접음'
+                : t.target > 1 ? `${t.done}/${t.target}` : (t.done ? '✓' : '─')}</span>
+            </div>`).join('')}
+        </div>`;
+      }).join('')}
+      <p class="hint" style="margin-top:14px">쓴 것 ${done || 0}개 · 남은 것 ${open || 0}개.
+        진도를 막지는 않아요. 안 써도 다음 장면으로 갈 수 있습니다.</p>
+    </div>`;
 }
 
 /* ── 음성 인식 ── */
@@ -357,7 +473,7 @@ function renderResult(d) {
 /* ═══ 복습 (SRS 플래시카드) ═══ */
 async function renderReview() {
   const d = await api('?action=review');
-  cards = d.cards || []; cardIdx = 0; flipped = false;
+  cards = d.cards || []; cardIdx = 0; flipped = false; wroteThis = false;
   renderStats(null, d.stats, today?.profile?.level);
   renderXp(d.xp);
   if (!cards.length) {
@@ -391,24 +507,46 @@ function drawCard() {
       </div>
     </div>
     <button class="btn-ghost" onclick="__speak('${esc(c.hanzi).replace(/'/g, "\\'")}')">🔊 발음 듣기</button>
-    ${flipped ? `
-      <div class="quality-row">
-        <div class="q-btn" data-q="0"><b>😵</b>모르겠음</div>
-        <div class="q-btn" data-q="1"><b>😐</b>어려움</div>
-        <div class="q-btn" data-q="2"><b>🙂</b>보통</div>
-        <div class="q-btn" data-q="3"><b>😎</b>쉬움</div>
-      </div>
-      <p class="hint" style="text-align:center">솔직하게 고를수록 복습 주기가 정확해집니다.</p>`
-    : ''}`;
+    ${!flipped
+      ? `<div class="write-cue">
+           <b>✍️ 노트에 먼저 써보세요.</b>
+           <span>읽을 수 있는 것과 쓸 수 있는 것은 다른 기억입니다. 획순대로 한 번.</span>
+         </div>
+         <button class="btn-primary" id="flip">썼어요, 뒤집기</button>
+         <button class="btn-ghost" id="flipOnly">머릿속으로만 떠올렸어요</button>`
+      : `${wroteThis ? `<div class="wrote-badge">✍️ 손으로 쓰고 맞히면 다음 복습이 더 멀어집니다</div>` : ''}
+         <div class="quality-row">
+           <div class="q-btn" data-q="0"><b>😵</b>모르겠음</div>
+           <div class="q-btn" data-q="1"><b>😐</b>어려움</div>
+           <div class="q-btn" data-q="2"><b>🙂</b>보통</div>
+           <div class="q-btn" data-q="3"><b>😎</b>쉬움</div>
+         </div>
+         <p class="hint" style="text-align:center">솔직하게 고를수록 복습 주기가 정확해집니다.</p>`}`;
 
-  $('#flashCard').addEventListener('click', () => { if (!flipped) { flipped = true; drawCard(); } });
-  document.querySelectorAll('.q-btn').forEach(b =>
-    b.addEventListener('click', async () => {
-      const r = await post({ action: 'review', cardId: c.id, quality: Number(b.dataset.q) });
-      if (r.xp) renderXp(r.xp);
-      if (r.result?.promoted) xpToast(r.result.xpGained, `${r.result.hanzi} → ${TIER_META[r.result.promoted.to].label} 승급!`);
-      cardIdx++; flipped = false; drawCard();
-    }));
+  if (!flipped) {
+    $('#flip').addEventListener('click', () => { wroteThis = true; flipped = true; drawCard(); });
+    $('#flipOnly').addEventListener('click', () => { wroteThis = false; flipped = true; drawCard(); });
+  } else {
+    document.querySelectorAll('.q-btn').forEach(b =>
+      b.addEventListener('click', () => gradeCard(c, Number(b.dataset.q))));
+  }
+}
+
+async function gradeCard(c, quality) {
+  document.querySelectorAll('.q-btn').forEach(b => (b.style.pointerEvents = 'none'));
+  try {
+    const r = await post({ action: 'review', cardId: c.id, quality, wrote: wroteThis });
+    if (r.xp) renderXp(r.xp);
+    if (r.result?.promoted) xpToast(r.result.xpGained, `${r.result.hanzi} → ${TIER_META[r.result.promoted.to].label} 승급!`);
+    // ✍️ 손으로 써서 실제로 며칠을 벌었는지 — 이게 진짜 보상입니다
+    if (r.daysGained > 0) {
+      $('#view').insertAdjacentHTML('afterbegin',
+        `<div class="promo-toast wrote">✍️ 손으로 쓴 덕분에 다음 복습이 <b>${r.daysGained}일</b> 더 멀어졌어요
+         ${r.nextInDays ? `<span>${r.nextInDays}일 뒤에 다시 물어볼게요</span>` : ''}</div>`);
+      await new Promise(x => setTimeout(x, 1400));
+    }
+  } catch (err) { console.error(err); }
+  cardIdx++; flipped = false; wroteThis = false; drawCard();
 }
 
 /* ═══ 기록 ═══ */

@@ -19,13 +19,28 @@ import { getPool } from "./agent-brain.js";
 
 let tablesReady;
 
-/** 과제 종류 — 라벨은 UI에서 그대로 씁니다 */
+/**
+ * 과제 종류 — 라벨은 UI에서 그대로 씁니다.
+ * 과정마다 쓰는 종류가 다릅니다. 모르는 kind가 오면 table로 떨어지므로
+ * 새 교실을 열 때 여기에 추가하지 않아도 망가지지는 않지만, 라벨이 엉뚱해집니다.
+ */
 export const TASK_KINDS = {
+  // 공통
   table:       { label: '표 채우기',   icon: '▦', hint: '가리고 채우기를 반복하세요' },
-  conjugation: { label: '변화형 쓰기', icon: '⋮', hint: '소리 내어 읽으면서 쓰면 더 붙어요' },
   sentences:   { label: '예문 옮기기', icon: '¶', hint: '뜻도 같이 적어두면 나중에 찾기 쉬워요' },
   errors:      { label: '오답 정리',   icon: '✗', hint: '왜 틀렸는지 한 줄을 꼭 같이 쓰세요' },
   vocab:       { label: '단어 쓰기',   icon: '✎', hint: '관사·복수형까지 함께 쓰세요' },
+  // 독일어
+  conjugation: { label: '변화형 쓰기', icon: '⋮', hint: '소리 내어 읽으면서 쓰면 더 붙어요' },
+  // 회계
+  journal:     { label: '분개 쓰기',   icon: '⇄', hint: '차변·대변 금액 합계가 같은지 매번 확인하세요' },
+  // 중국어
+  hanzi:       { label: '한자 쓰기',   icon: '字', hint: '획순대로. 소리 내어 읽으면서 쓰면 성조까지 붙습니다' },
+  // 수학
+  solve:       { label: '손으로 풀기', icon: '∫', hint: '답만 쓰지 말고 넘어가는 줄을 다 남기세요' },
+  derive:      { label: '공식 유도',   icon: '⟹', hint: '외우지 말고 매번 처음부터 끌어내 보세요' },
+  statement:   { label: '재무제표 그리기', icon: '▤', hint: '숫자보다 구조를 먼저 — 칸부터 그리세요' },
+  accounts:    { label: '계정과목 쓰기', icon: '◫', hint: '자산·부채·자본·수익·비용 중 어디인지 옆에 적으세요' },
 };
 
 export async function ensureNotebookTables() {
@@ -244,17 +259,31 @@ export function deriveTasks(course, chapter, lesson = {}) {
     || (lesson.walkthrough?.steps || []).some(s => s?.board);
 
   if (hasBoard) {
-    tasks.push({ kind: 'table', target: 3,
-      spec: `${chapter.title}의 표를 노트에 옮겨 그리고, 가린 채로 채우기를 반복하세요.` });
+    tasks.push(course === 'accounting'
+      ? { kind: 'statement', target: 3,
+          spec: `${chapter.title}의 표를 노트에 옮겨 그리고, 금액을 가린 채로 채우기를 반복하세요.` }
+      : { kind: 'table', target: 3,
+          spec: `${chapter.title}의 표를 노트에 옮겨 그리고, 가린 채로 채우기를 반복하세요.` });
   }
   if (cards.length) {
     const names = cards.map(c => c.front || c.title).filter(Boolean).slice(0, 4).join(', ');
-    tasks.push({ kind: course === 'chinese' ? 'vocab' : 'sentences', target: 2,
-      spec: `오늘 나온 것을 노트에 옮겨 적으세요${names ? ` — ${names}` : ''}.` });
+    // 수학 공식은 옮겨 적는 것보다 **다시 끌어내 보는 것**이 남습니다
+    if (course === 'math') {
+      tasks.push({ kind: 'derive', target: 3,
+        spec: `오늘 나온 공식을 노트에 처음부터 유도해 보세요${names ? ` — ${names}` : ''}. 외워서 쓰지 말고요.` });
+    } else {
+      const kind = course === 'chinese' ? 'hanzi'
+                 : course === 'accounting' ? 'accounts' : 'sentences';
+      tasks.push({ kind, target: 2,
+        spec: `오늘 나온 것을 노트에 옮겨 적으세요${names ? ` — ${names}` : ''}.` });
+    }
   }
   if (!tasks.length) {
-    tasks.push({ kind: 'sentences', target: 1,
-      spec: `${chapter.title}에서 가장 헷갈렸던 부분을 노트에 정리하세요.` });
+    tasks.push(course === 'math'
+      ? { kind: 'solve', target: 2,
+          spec: `${chapter.title}의 확인 문제를 노트에 손으로 다시 풀어보세요. 넘어가는 줄을 다 남기고요.` }
+      : { kind: 'sentences', target: 1,
+          spec: `${chapter.title}에서 가장 헷갈렸던 부분을 노트에 정리하세요.` });
   }
   return tasks;
 }

@@ -3,27 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0F1620" />
-  <link rel="manifest" href="/math/manifest.webmanifest" />
-  <link rel="icon" href="/math/icon-192.png" />
-  <link rel="apple-touch-icon" href="/math/icon-192.png" />
+  <meta name="theme-color" content="#121815" />
+  <link rel="manifest" href="/accounting/manifest.webmanifest" />
+  <link rel="icon" href="/accounting/icon-192.png" />
+  <link rel="apple-touch-icon" href="/accounting/icon-192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="클로이의 수학 노트" />
+  <meta name="apple-mobile-web-app-title" content="한세진의 회계 노트" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>클로이의 수학 노트</title>
+  <title>한세진의 회계 노트</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/math/math.css" />
+  <!-- Gowun Batang을 함께 싣습니다. 이 교실은 제목까지 전부 한국어라
+       Cormorant Garamond(라틴 전용) 뒤로 떨어지면 기기 기본 세리프가 나와 들쭉날쭉해집니다. -->
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/accounting/accounting.css" />
 </head>
 <body>
   <div id="gate" class="gate">
     <div class="gate-card">
-      <p class="gate-eyebrow">MATH NOTE</p>
-      <h1 class="gate-title">클로이의<br/>수학 노트</h1>
-      <p class="gate-sub">조교이자 스파링 파트너, 클로이와 함께<br/>공통수학 51강</p>
-      <input id="keyInput" type="password" placeholder="관리자 키" autocomplete="current-password" />
+      <p class="gate-eyebrow">ACCOUNTING</p>
+      <h1 class="gate-title">한세진의<br/>회계 노트</h1>
+      <p class="gate-sub">직장인이여 회계하라 · 69장<br/>회계사이자 같은 편, 세진과 함께</p>
+      <p class="gate-hint">초대받으셨다면 받은 키를 그대로 넣으세요.</p>
+      <input id="keyInput" type="password" placeholder="내 키" autocomplete="current-password" />
       <button id="enterBtn" class="btn-primary">노트 펼치기</button>
       <p id="gateError" class="gate-error" hidden></p>
     </div>
@@ -32,7 +35,7 @@
   <div id="app" hidden>
     <header class="topbar">
       <div class="brand">
-        <span class="brand-sub">클로이의 수학 노트 <b id="whoami"></b></span>
+        <span class="brand-sub">한세진의 회계 노트 <b id="whoami"></b></span>
         <span class="brand-main" id="chapterLabel">—</span>
       </div>
       <div class="stat-strip" id="statStrip"></div>
@@ -48,6 +51,7 @@
       <button data-tab="today" class="active">오늘 수업</button>
       <button data-tab="map">목차</button>
       <button data-tab="review">복습 <span id="dueBadge" class="badge" hidden>0</span></button>
+      <button data-tab="collection">계정과목</button>
       <button data-tab="notebook">내 노트 <span id="nbBadge" class="badge" hidden>0</span></button>
       <button data-tab="together">함께 <span id="tgBadge" class="badge" hidden>0</span></button>
       <button data-tab="gaps">약한 곳</button>
@@ -61,11 +65,11 @@
     // 화면 파일은 네트워크 우선이라 배포하면 바로 최신이 반영됩니다.
     if ('serviceWorker' in navigator) {
       addEventListener('load', () => {
-        navigator.serviceWorker.register('/math/sw.js', { scope: '/math/' })
+        navigator.serviceWorker.register('/accounting/sw.js', { scope: '/accounting/' })
           .catch((e) => console.warn('[PWA] 등록 실패:', e.message));
       });
     }
   </script>
-  <script type="module" src="/math/math.js"></script>
+  <script type="module" src="/accounting/accounting.js"></script>
 </body>
 </html>

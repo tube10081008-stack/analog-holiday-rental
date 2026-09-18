@@ -20,10 +20,21 @@ import { sm2 } from "./chinese.js";   // 간격 반복 엔진은 동일한 것�
 
 let tablesReady;
 
+/**
+ * 스키마 준비.
+ *
+ * ⚠️ 전에는 이 전부가 **한 덩어리 멀티 문장 쿼리**였습니다.
+ *    Postgres는 그걸 하나의 암묵적 트랜잭션으로 돌리기 때문에,
+ *    중간 문장 하나가 실패하면 앞의 CREATE·ALTER까지 전부 롤백됩니다.
+ *    독일어 노트에서 정확히 그 일이 일어나 로그인이 통째로 막혔습니다.
+ *    그래서 여기도 세 단계로 쪼개고, 실패는 한 문장 단위로 기록만 남깁니다.
+ *      1) 테이블  2) 마이그레이션(한 문장씩)  3) 씨앗
+ */
 export async function ensureMathTables() {
   const pool = getPool();
   if (!pool || tablesReady) return;
-  tablesReady = pool.query(`
+  tablesReady = (async () => {
+    await pool.query(`
     CREATE TABLE IF NOT EXISTS math_profile (
       id INTEGER PRIMARY KEY DEFAULT 1,
       chapter_index INTEGER NOT NULL DEFAULT 1,
@@ -76,16 +87,55 @@ export async function ensureMathTables() {
       ref TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_mx_ref ON math_xp(ref) WHERE ref IS NOT NULL;
-    INSERT INTO math_profile (id, chapter_index) VALUES (1, 1) ON CONFLICT (id) DO NOTHING;
+    `);
 
-    -- 설명 분량 확대에 따라 추가된 단계들. 이미 만들어진 테이블에도 붙도록 ALTER로 둡니다.
-    ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS warmup JSONB NOT NULL DEFAULT '[]';
-    ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS walkthrough JSONB NOT NULL DEFAULT '{}';
-    ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS aside TEXT NOT NULL DEFAULT '';
-  `).catch(() => { tablesReady = null; });
+    // 2) 마이그레이션 — 한 문장씩. 하나가 실패해도 나머지는 돕니다.
+    for (const sql of MATH_MIGRATIONS) {
+      await pool.query(sql).catch((e) =>
+        console.warn('[Math] 마이그레이션 건너뜀:', sql.trim().slice(0, 70), '—', e.message));
+    }
+
+    // 3) 씨앗 — 칼럼이 모두 붙은 뒤에
+    await pool.query(
+      `INSERT INTO math_profile (id, chapter_index, user_id)
+       VALUES (1, 1, 1) ON CONFLICT (id) DO NOTHING`
+    ).catch((e) => console.warn('[Math] 주인 프로필 씨앗 실패:', e.message));
+  })().catch((e) => {
+    console.error('[Math] 스키마 준비 실패:', e.message);
+    tablesReady = null;   // 다음 요청에서 다시 시도합니다
+  });
   await tablesReady;
 }
+
+/**
+ * 이미 만들어진 테이블에 칼럼·인덱스를 붙입니다.
+ * CREATE TABLE IF NOT EXISTS는 기존 테이블을 건드리지 않으므로 여기서 따로 처리합니다.
+ * 순서가 중요합니다 — 칼럼을 먼저 붙이고, 그 칼럼을 쓰는 인덱스를 나중에 만듭니다.
+ */
+const MATH_MIGRATIONS = [
+  // 설명 분량 확대에 따라 추가된 단계들
+  `ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS warmup JSONB NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS walkthrough JSONB NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS aside TEXT NOT NULL DEFAULT ''`,
+  // 📓 노트 연동 — 수업이 직접 지정한 손글씨 과제
+  `ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS notebook JSONB NOT NULL DEFAULT '[]'`,
+
+  // 👥 사용자 분리. 기존 데이터는 전부 주인(id=1)의 것이므로 DEFAULT 1로 이관됩니다
+  `ALTER TABLE math_profile ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE math_lessons ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE math_cards   ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE math_gaps    ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE math_xp      ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 1`,
+
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_mp_user ON math_profile(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_ml_user ON math_lessons(user_id, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_mc_user ON math_cards(user_id, due_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_mg_user ON math_gaps(user_id, resolved)`,
+
+  // XP 중복 방지 키가 전역이면 두 사람이 같은 ref를 쓸 때 한쪽이 조용히 막힙니다 → 사람별로
+  `DROP INDEX IF EXISTS idx_mx_ref`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_mx_user_ref ON math_xp(user_id, ref) WHERE ref IS NOT NULL`,
+];
 
 // ═══════════════════════════════════════════════════
 // 📚 커리큘럼 — 이광연 《개념 있는 수학자: 공통수학 편》 목차 순서
@@ -157,7 +207,7 @@ export function getChapter(index) {
 // 👩‍🏫 클로이 — 조교이자 스파링 파트너
 // ═══════════════════════════════════════════════════
 
-const CHLOE = `당신은 '클로이'입니다. 학습자가 붙여준 이름이고, 당신은 그 호칭을 기쁘게 받습니다.
+export const CHLOE_FOR_PEER = `당신은 '클로이'입니다. 학습자가 붙여준 이름이고, 당신은 그 호칭을 기쁘게 받습니다.
 
 ## 당신의 위치 (중요)
 당신은 이 학습자의 **수학 선생님이 아니라 조교이자 스파링 파트너**입니다.
@@ -490,91 +540,123 @@ ${history?.length ? `\n## 이 챕터에서 앞서 주고받은 내용\n${history
 // 💾 진도 · 레슨 · 카드 · XP
 // ═══════════════════════════════════════════════════
 
-export async function getProfile() {
+export async function getProfile(userId = 1) {
   const pool = getPool(); if (!pool) return null;
   await ensureMathTables();
-  const r = await pool.query(`SELECT * FROM math_profile WHERE id=1`);
-  return r.rows[0] || null;
+  const r = await pool.query(`SELECT * FROM math_profile WHERE user_id=$1`, [userId]);
+  if (r.rows[0]) return r.rows[0];
+  // ⚠️ id는 PRIMARY KEY DEFAULT 1 이라 생략하면 주인 행과 부딪힙니다.
+  //    (독일어 노트에서 이것 때문에 친구가 아예 시작을 못 했습니다)
+  const ins = await pool.query(
+    `INSERT INTO math_profile (id, chapter_index, user_id) VALUES ($1, 1, $1)
+     ON CONFLICT (id) DO NOTHING RETURNING *`, [userId]).catch(() => ({ rows: [] }));
+  if (ins.rows[0]) return ins.rows[0];
+  const again = await pool.query(`SELECT * FROM math_profile WHERE user_id=$1`, [userId]);
+  return again.rows[0] || null;
 }
 
-export async function setChapterIndex(idx) {
+export async function setChapterIndex(userId, idx) {
   const pool = getPool(); if (!pool) return;
-  await ensureMathTables();
-  await pool.query(`UPDATE math_profile SET chapter_index=$1 WHERE id=1`,
-    [Math.max(0, Math.min(CHAPTERS.length - 1, Number(idx) || 0))]);
+  await getProfile(userId);
+  await pool.query(`UPDATE math_profile SET chapter_index=$1 WHERE user_id=$2`,
+    [Math.max(0, Math.min(CHAPTERS.length - 1, Number(idx) || 0)), userId]);
 }
 
-export async function getOpenLesson() {
+export async function getOpenLesson(userId = 1) {
   const pool = getPool(); if (!pool) return null;
   await ensureMathTables();
-  const r = await pool.query(`SELECT * FROM math_lessons WHERE status='open' ORDER BY created_at DESC LIMIT 1`);
+  const r = await pool.query(
+    `SELECT * FROM math_lessons WHERE user_id=$1 AND status='open'
+     ORDER BY created_at DESC LIMIT 1`, [userId]);
   return r.rows[0] || null;
 }
 
-export async function createLesson(chapter, gen) {
+/**
+ * 🤝 같은 장을 이미 누군가 배웠다면 그 수업 내용을 그대로 씁니다.
+ * 둘이 같은 글을 읽어야 답 비교가 의미 있고, 생성 비용도 아낍니다.
+ * 진행(step)과 주고받은 기록(turns)은 사람마다 새로 시작합니다.
+ */
+export async function findSharedLesson(chapterNo) {
   const pool = getPool(); if (!pool) return null;
-  const id = `ml_${chapter.no}_${Date.now()}`;
+  await ensureMathTables();
+  const r = await pool.query(
+    `SELECT * FROM math_lessons WHERE chapter_no=$1 ORDER BY created_at ASC LIMIT 1`, [chapterNo]);
+  return r.rows[0] || null;
+}
+
+export async function createLesson(userId, chapter, gen) {
+  const pool = getPool(); if (!pool) return null;
+  const id = `ml_u${userId}_${chapter.no}_${Date.now()}`;
   await pool.query(
     `INSERT INTO math_lessons
-       (id, chapter_no, unit, title, intro, warmup, concept, walkthrough, problems, summary, formulas, aside)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-    [id, chapter.no, chapter.unit, chapter.title, gen.intro,
+       (id, user_id, chapter_no, unit, title, intro, warmup, concept, walkthrough,
+        problems, summary, formulas, notebook, aside)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+    [id, userId, chapter.no, chapter.unit, chapter.title, gen.intro,
      JSON.stringify(gen.warmup || []), gen.concept,
      JSON.stringify(gen.walkthrough || {}), JSON.stringify(gen.problems),
-     JSON.stringify(gen.summary || []), JSON.stringify(gen.formulas || []), gen.aside || '']
+     JSON.stringify(gen.summary || []), JSON.stringify(gen.formulas || []),
+     JSON.stringify(gen.notebook || []), gen.aside || '']
   );
   const r = await pool.query(`SELECT * FROM math_lessons WHERE id=$1`, [id]);
   return r.rows[0];
 }
 
-export async function advanceStep(lessonId, step, turn) {
+export async function advanceStep(userId, lessonId, step, turn) {
   const pool = getPool(); if (!pool) return;
   if (turn) {
     await pool.query(
-      `UPDATE math_lessons SET step=$1, turns = turns || $2::jsonb WHERE id=$3`,
-      [step, JSON.stringify([turn]), lessonId]
+      `UPDATE math_lessons SET step=$1, turns = turns || $2::jsonb
+        WHERE id=$3 AND user_id=$4`,
+      [step, JSON.stringify([turn]), lessonId, userId]
     );
   } else {
-    await pool.query(`UPDATE math_lessons SET step=$1 WHERE id=$2`, [step, lessonId]);
+    await pool.query(`UPDATE math_lessons SET step=$1 WHERE id=$2 AND user_id=$3`,
+      [step, lessonId, userId]);
   }
 }
 
-export async function completeLesson(lessonId) {
+export async function completeLesson(userId, lessonId) {
   const pool = getPool(); if (!pool) return;
-  await pool.query(`UPDATE math_lessons SET status='done', done_at=NOW() WHERE id=$1`, [lessonId]);
-  await pool.query(`UPDATE math_profile SET chapter_index = chapter_index + 1 WHERE id=1`);
+  await pool.query(
+    `UPDATE math_lessons SET status='done', done_at=NOW() WHERE id=$1 AND user_id=$2`,
+    [lessonId, userId]);
+  await pool.query(
+    `UPDATE math_profile SET chapter_index = chapter_index + 1 WHERE user_id=$1`, [userId]);
 }
 
-export async function recordGap(chapterNo, concept, detail) {
+export async function recordGap(userId, chapterNo, concept, detail) {
   const pool = getPool(); if (!pool || !concept) return;
   await pool.query(
-    `INSERT INTO math_gaps (chapter_no, concept, detail) VALUES ($1,$2,$3)`,
-    [chapterNo, String(concept).slice(0, 120), String(detail || '').slice(0, 600)]
+    `INSERT INTO math_gaps (user_id, chapter_no, concept, detail) VALUES ($1,$2,$3,$4)`,
+    [userId, chapterNo, String(concept).slice(0, 120), String(detail || '').slice(0, 600)]
   ).catch(() => {});
 }
 
-export async function getGaps(limit = 10) {
+export async function getGaps(userId, limit = 10) {
   const pool = getPool(); if (!pool) return [];
   await ensureMathTables();
   const r = await pool.query(
     `SELECT concept, COUNT(*)::int AS times, MAX(created_at) AS last_at
-     FROM math_gaps WHERE resolved = FALSE
-     GROUP BY concept ORDER BY times DESC, last_at DESC LIMIT $1`, [limit]
+     FROM math_gaps WHERE user_id=$1 AND resolved = FALSE
+     GROUP BY concept ORDER BY times DESC, last_at DESC LIMIT $2`, [userId, limit]
   );
   return r.rows;
 }
 
-export async function addFormulaCards(formulas, chapterNo) {
+export async function addFormulaCards(userId, formulas, chapterNo) {
   const pool = getPool(); if (!pool || !formulas?.length) return 0;
   let n = 0;
   for (const f of formulas) {
     if (!f?.title) continue;
-    const id = `mc_${chapterNo}_${Buffer.from(String(f.title)).toString('base64url').slice(0, 32)}`;
+    // ⚠️ ID에 사용자를 넣지 않으면 둘이 같은 장을 배울 때 뒤에 온 사람 카드가
+    //    ON CONFLICT DO NOTHING으로 조용히 사라집니다
+    const id = `mc_u${userId}_${chapterNo}_${Buffer.from(String(f.title)).toString('base64url').slice(0, 32)}`;
     try {
       const r = await pool.query(
-        `INSERT INTO math_cards (id, title, body, note, chapter_no) VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (id) DO NOTHING`,
-        [id, f.title, f.body || '', f.note || '', chapterNo]
+        `INSERT INTO math_cards (id, user_id, title, body, note, chapter_no)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
+        [id, userId, f.title, f.body || '', f.note || '', chapterNo]
       );
       if (r.rowCount > 0) n++;
     } catch { /* skip */ }
@@ -582,38 +664,56 @@ export async function addFormulaCards(formulas, chapterNo) {
   return n;
 }
 
-export async function getDueCards(limit = 10) {
+export async function getDueCards(userId, limit = 10) {
   const pool = getPool(); if (!pool) return [];
   await ensureMathTables();
   const r = await pool.query(
     `SELECT id, title, body, note, chapter_no, ease, interval_days, repetitions, lapses
-     FROM math_cards WHERE due_at <= NOW() ORDER BY due_at ASC LIMIT $1`, [limit]
+     FROM math_cards WHERE user_id=$1 AND due_at <= NOW()
+     ORDER BY due_at ASC LIMIT $2`, [userId, limit]
   );
   return r.rows;
 }
 
-export async function reviewCard(cardId, quality) {
+/**
+ * 복습 카드 채점. quality는 0~3 (0 잊음 · 1 겨우 · 2 무난 · 3 쉽게).
+ * wrote=true 면 노트에 손으로 풀어서 맞힌 경우 — 간격을 더 길게 줍니다.
+ * 수학은 특히 그렇습니다. 눈으로 본 공식과 손으로 유도한 공식은 다른 기억이에요.
+ */
+export async function reviewCard(userId, cardId, quality, wrote = false) {
   const pool = getPool(); if (!pool) return null;
-  const cur = await pool.query(`SELECT * FROM math_cards WHERE id=$1`, [cardId]);
+  // 남의 카드를 채점하지 못하게 사용자까지 걸어 조회합니다
+  const cur = await pool.query(
+    `SELECT * FROM math_cards WHERE id=$1 AND user_id=$2`, [cardId, userId]);
   const card = cur.rows[0];
   if (!card) return null;
-  const next = sm2(card, Number(quality));
+  const q = Math.max(0, Math.min(3, Number(quality) || 0));
+  const wroteIt = !!wrote && q >= 2;   // 틀린 걸 썼다고 보너스를 주지는 않습니다
+
+  const plain = sm2(card, q);                      // 노트 없이 풀었다면 받았을 간격
+  const next = sm2(card, q, { wrote: wroteIt });
   await pool.query(
     `UPDATE math_cards SET ease=$1, interval_days=$2, repetitions=$3, lapses=$4,
-       due_at = NOW() + ($5 || ' days')::interval, last_result=$6 WHERE id=$7`,
+       due_at = NOW() + ($5 || ' days')::interval, last_result=$6
+     WHERE id=$7 AND user_id=$8`,
     [next.ease, next.interval_days, next.repetitions, next.lapses,
-     String(next.interval_days), quality < 2 ? 'fail' : 'pass', cardId]
+     String(next.interval_days), q < 2 ? 'fail' : (wroteIt ? 'wrote' : 'pass'), cardId, userId]
   );
-  return { ...next, title: card.title };
+  return {
+    ...next, title: card.title, wrote: wroteIt,
+    nextInDays: next.interval_days,
+    // 손으로 풀어서 며칠을 벌었는지 — 이게 학습자가 보는 실제 보상입니다
+    daysGained: wroteIt ? Math.round((next.interval_days - plain.interval_days) * 10) / 10 : 0,
+  };
 }
 
-export async function grantXp(amount, reason, ref = null) {
+export async function grantXp(userId, amount, reason, ref = null) {
   const pool = getPool(); if (!pool || amount <= 0) return 0;
   await ensureMathTables();
   try {
     const r = await pool.query(
-      `INSERT INTO math_xp (amount, reason, ref) VALUES ($1,$2,$3)
-       ON CONFLICT (ref) DO NOTHING RETURNING amount`, [amount, reason, ref]);
+      `INSERT INTO math_xp (user_id, amount, reason, ref) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (user_id, ref) DO NOTHING RETURNING amount`, [userId, amount, reason, ref]);
     return r.rows[0]?.amount || 0;
   } catch { return 0; }
 }
@@ -627,22 +727,27 @@ export function levelFromXp(xp) {
     progress: Math.min(100, Math.round(((xp - cur) / (next - cur)) * 100)) };
 }
 
-export async function getXpState() {
+export async function getXpState(userId = 1) {
   const pool = getPool(); if (!pool) return levelFromXp(0);
   await ensureMathTables();
-  const r = await pool.query(`SELECT COALESCE(SUM(amount),0)::int AS xp FROM math_xp`);
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(amount),0)::int AS xp FROM math_xp WHERE user_id=$1`, [userId]);
   return levelFromXp(r.rows[0]?.xp || 0);
 }
 
-export async function getMathStats() {
+export async function getMathStats(userId = 1) {
   const pool = getPool(); if (!pool) return null;
   await ensureMathTables();
-  const done = await pool.query(`SELECT COUNT(*)::int AS n FROM math_lessons WHERE status='done'`);
+  const done = await pool.query(
+    `SELECT COUNT(DISTINCT chapter_no)::int AS n FROM math_lessons
+      WHERE user_id=$1 AND status='done'`, [userId]);
   const cards = await pool.query(
-    `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE due_at <= NOW())::int AS due FROM math_cards`);
+    `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE due_at <= NOW())::int AS due
+       FROM math_cards WHERE user_id=$1`, [userId]);
   const days = await pool.query(
     `SELECT COUNT(DISTINCT DATE(done_at AT TIME ZONE 'Asia/Seoul'))::int AS d
-     FROM math_lessons WHERE status='done' AND done_at >= NOW() - INTERVAL '7 days'`);
+     FROM math_lessons WHERE user_id=$1 AND status='done'
+       AND done_at >= NOW() - INTERVAL '7 days'`, [userId]);
   return {
     done: done.rows[0]?.n || 0,
     total: CHAPTERS.length,
@@ -652,9 +757,10 @@ export async function getMathStats() {
   };
 }
 
-export async function getDoneChapters() {
+export async function getDoneChapters(userId = 1) {
   const pool = getPool(); if (!pool) return [];
   await ensureMathTables();
-  const r = await pool.query(`SELECT DISTINCT chapter_no FROM math_lessons WHERE status='done'`);
+  const r = await pool.query(
+    `SELECT DISTINCT chapter_no FROM math_lessons WHERE user_id=$1 AND status='done'`, [userId]);
   return r.rows.map(x => x.chapter_no);
 }
