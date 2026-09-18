@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#12161B" />
+  <link rel="manifest" href="/school/manifest.webmanifest" />
+  <link rel="icon" href="/school/icon-192.png" />
+  <link rel="apple-touch-icon" href="/school/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="윌리엄스 스쿨" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>윌리엄스 스쿨 — 대표 과정</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -41,6 +48,16 @@
     <main id="view" class="view"></main>
   </div>
 
+  <script>
+    // 서비스 워커 — 홈 화면에서 앱처럼 열고, 끊겨도 마지막 화면은 뜨게 합니다.
+    // 화면 파일은 네트워크 우선이라 배포하면 바로 최신이 반영됩니다.
+    if ('serviceWorker' in navigator) {
+      addEventListener('load', () => {
+        navigator.serviceWorker.register('/school/sw.js', { scope: '/school/' })
+          .catch((e) => console.warn('[PWA] 등록 실패:', e.message));
+      });
+    }
+  </script>
   <script type="module" src="/school/school.js"></script>
 </body>
 </html>
