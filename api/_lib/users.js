@@ -20,20 +20,37 @@ import { getAdminKey } from "./reservations.js";
 let tablesReady;
 let ownerReady = null;   // 요청마다 시퀀스를 다시 맞출 필요는 없습니다
 
+/**
+ * 계정에 붙일 수 있는 교실 목록 — **여기 한 곳에만** 적습니다.
+ * 교실을 열 때 이 배열을 빼먹으면 두 가지가 조용히 망가집니다.
+ *   ① invite()가 새 과정을 걸러내고 엉뚱하게 독일어로 초대합니다
+ *   ② partnersOf()가 그 과정에서 주인을 못 찾아, 친구 화면에 아무도 안 보입니다
+ */
+export const COURSES = ['german', 'accounting', 'math', 'chinese'];
+
 export async function ensureUserTables() {
   const pool = getPool();
   if (!pool || tablesReady) return;
-  tablesReady = pool.query(`
-    CREATE TABLE IF NOT EXISTS study_users (
-      id SERIAL PRIMARY KEY,
-      name TEXT NOT NULL,
-      login_key TEXT NOT NULL UNIQUE,
-      is_owner BOOLEAN NOT NULL DEFAULT FALSE,
-      courses TEXT[] NOT NULL DEFAULT ARRAY['german']::text[],
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      last_seen TIMESTAMPTZ
-    );
-  `).catch(() => { tablesReady = null; });
+  tablesReady = (async () => {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS study_users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        login_key TEXT NOT NULL UNIQUE,
+        is_owner BOOLEAN NOT NULL DEFAULT FALSE,
+        courses TEXT[] NOT NULL DEFAULT ARRAY['german']::text[],
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_seen TIMESTAMPTZ
+      );
+    `);
+    // 주인은 언제나 모든 교실에 들어갈 수 있어야 합니다.
+    // 교실이 새로 열려도 기존 주인 행은 옛 목록을 들고 있으므로 여기서 채워 넣습니다.
+    // (이게 없으면 새 교실에 초대된 친구 화면에 주인이 동료로 안 잡힙니다)
+    await pool.query(
+      `UPDATE study_users SET courses = $1::text[]
+        WHERE is_owner = TRUE AND NOT (courses @> $1::text[])`, [COURSES]
+    ).catch((e) => console.warn('[사용자] 주인 교실 목록 갱신 실패:', e.message));
+  })().catch(() => { tablesReady = null; });
   await tablesReady;
 }
 
@@ -64,10 +81,10 @@ export async function ensureOwner() {
   // id=1을 명시적으로 잡아둡니다 — 기존 데이터의 기본값과 맞춰야 합니다
   const r = await pool.query(
     `INSERT INTO study_users (id, name, login_key, is_owner, courses)
-     VALUES (1, $1, $2, TRUE, ARRAY['german','math','chinese']::text[])
+     VALUES (1, $1, $2, TRUE, $3::text[])
      ON CONFLICT (id) DO UPDATE SET login_key = EXCLUDED.login_key, is_owner = TRUE
      RETURNING *`,
-    [process.env.OWNER_NAME || '나', adminKey]);
+    [process.env.OWNER_NAME || '나', adminKey, COURSES]);
   // SERIAL 시퀀스가 1에서 멈춰 있으면 다음 INSERT가 충돌하므로 앞으로 당겨둡니다
   await pool.query(
     `SELECT setval('study_users_id_seq', GREATEST((SELECT MAX(id) FROM study_users), 1))`
@@ -98,7 +115,7 @@ export async function invite(name, courses = ['german']) {
   const chunk = (n) => Array.from(crypto.randomBytes(n))
     .map(b => ALPHA[b % ALPHA.length]).join('');
   const key = `${chunk(4)}-${chunk(4)}`;
-  const safe = (courses || []).filter(c => ['german', 'math', 'chinese'].includes(c));
+  const safe = (courses || []).filter(c => COURSES.includes(c));
   const r = await pool.query(
     `INSERT INTO study_users (name, login_key, is_owner, courses)
      VALUES ($1, $2, FALSE, $3::text[]) RETURNING *`,

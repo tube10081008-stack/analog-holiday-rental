@@ -45,6 +45,19 @@ export async function ensureTogetherTables() {
 }
 
 /**
+ * 과정별 테이블 이름. **여기 한 곳에만** 적습니다.
+ * (전에는 삼항연산자를 함수마다 늘어놓아서, 교실을 추가하면 고칠 곳이 흩어졌습니다)
+ *
+ * ⚠️ 여기 올리려면 그 과정의 lessons·profile에 user_id 칼럼이 있어야 합니다.
+ *    없는 과정을 올리면 조회가 그대로 터집니다.
+ */
+const TABLES = {
+  german:     { profile: 'german_profile', lessons: 'german_lessons' },
+  accounting: { profile: 'acct_profile',   lessons: 'acct_lessons' },
+  math:       { profile: 'math_profile',   lessons: 'math_lessons' },
+};
+
+/**
  * 상대가 같은 장에서 낸 답을 가져옵니다.
  * @param mySubmitted 내가 그 문제를 이미 제출했는지. false면 아무것도 돌려주지 않습니다.
  */
@@ -52,8 +65,7 @@ export async function peerAnswers({ course = 'german', chapterNo, problemIndex,
                                     userId, partnerIds, mySubmitted }) {
   if (!mySubmitted || !partnerIds?.length) return [];
   const pool = getPool(); if (!pool) return [];
-  const table = course === 'german' ? 'german_lessons'
-              : course === 'math' ? 'math_lessons' : null;
+  const table = Object.hasOwn(TABLES, course) ? TABLES[course].lessons : null;
   if (!table) return [];
 
   const r = await pool.query(
@@ -83,11 +95,8 @@ export async function peerAnswers({ course = 'german', chapterNo, problemIndex,
 /** 같은 장을 하고 있는 사람들의 진도 요약 */
 export async function partnerProgress(course, partners) {
   const pool = getPool(); if (!pool || !partners?.length) return [];
-  const profile = course === 'german' ? 'german_profile'
-                : course === 'math' ? 'math_profile' : null;
-  const lessons = course === 'german' ? 'german_lessons'
-                : course === 'math' ? 'math_lessons' : null;
-  if (!profile) return [];
+  if (!Object.hasOwn(TABLES, course)) return [];
+  const { profile, lessons } = TABLES[course];
   const ids = partners.map(p => p.id);
 
   const [prog, act] = await Promise.all([
@@ -113,8 +122,11 @@ export async function partnerProgress(course, partners) {
 }
 
 /**
- * 설명을 남기기 전에 레나가 검증합니다.
+ * 설명을 남기기 전에 그 과정의 선생이 검증합니다.
  * 틀린 설명이 상대에게 그대로 가면 오답이 굳으므로, 보내기 전에 거릅니다.
+ *
+ * persona는 호출부가 넘겨줍니다(독일어는 레나, 회계는 세진). 그래서 이 프롬프트는
+ * 특정 선생 이름이나 특정 과목 용어("문법적으로")를 쓰지 않습니다.
  */
 export async function verifyExplanation({ chapter, problem, correctAnswer,
                                           peerAnswer, explanation, persona }) {
@@ -124,22 +136,22 @@ export async function verifyExplanation({ chapter, problem, correctAnswer,
 학습자 A가 학습자 B의 답에 **설명을 남기려 합니다.** 보내기 전에 그 설명이 맞는지 봐주세요.
 
 ## 판정 원칙
-1. 설명이 **문법적으로 맞으면** verdict는 "ok"입니다. 표현이 서툴러도 내용이 맞으면 ok예요.
+1. 설명의 **내용이 맞으면** verdict는 "ok"입니다. 표현이 서툴러도 내용이 맞으면 ok예요.
 2. 설명이 **틀렸거나 오해를 심을 수 있으면** "wrong"입니다.
    틀린 설명이 그대로 전달되면 상대가 오답을 굳히게 되니까요.
 3. 애매하면 "ok"로 두되 note에 보탤 말을 적으세요. 검열이 아니라 사고 방지입니다.
 
-## note (레나의 한 줄)
+## note (선생의 한 줄)
 - ok일 때: 설명에서 **잘 짚은 지점**을 한 문장으로. 또는 보태면 좋을 것 한 가지.
 - wrong일 때: **어디가 틀렸는지** 보낸 사람에게 알려주세요. 상대에게는 전달되지 않습니다.
   혼내지 말고 "이건 이렇게 보는 게 맞아요"로.
 - 120~200자.
 
 ## 순수 JSON만 출력
-{"verdict":"ok" 또는 "wrong","note":"레나의 한 줄"}`;
+{"verdict":"ok" 또는 "wrong","note":"선생의 한 줄"}`;
 
   const input = `## 장
-[${chapter.unit}] ${chapter.sec} ${chapter.de} — ${chapter.title}
+[${chapter.unit}] ${chapter.sec}${chapter.de ? ` ${chapter.de}` : ''} — ${chapter.title}
 
 ## 문제
 ${problem}
@@ -192,7 +204,9 @@ export async function inboxFor(userId, course = 'german', limit = 20) {
       ORDER BY n.created_at DESC LIMIT $3`, [userId, course, limit]);
   return r.rows.map(x => ({
     id: x.id, from: x.from_name, chapterNo: x.chapter_no, problemIndex: x.problem_index,
-    text: x.text, lenaNote: x.lena_note, seen: x.seen, at: x.created_at,
+    // lenaNote는 독일어 화면이 쓰는 옛 이름입니다. teacherNote가 과정 공용 이름이고
+    // 둘 다 같은 값입니다 (칼럼 이름을 바꾸는 마이그레이션은 이득보다 위험이 큽니다)
+    text: x.text, lenaNote: x.lena_note, teacherNote: x.lena_note, seen: x.seen, at: x.created_at,
   }));
 }
 
@@ -207,7 +221,8 @@ export async function outboxFor(userId, course = 'german', limit = 20) {
       ORDER BY n.created_at DESC LIMIT $3`, [userId, course, limit]);
   return r.rows.map(x => ({
     id: x.id, to: x.to_name, chapterNo: x.chapter_no, problemIndex: x.problem_index,
-    text: x.text, verdict: x.verdict, lenaNote: x.lena_note, at: x.created_at,
+    text: x.text, verdict: x.verdict, lenaNote: x.lena_note, teacherNote: x.lena_note,
+    at: x.created_at,
   }));
 }
 

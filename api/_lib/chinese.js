@@ -389,22 +389,30 @@ export async function getDueCards(limit = 12) {
   return r.rows;
 }
 
-export async function reviewCard(cardId, quality) {
+/**
+ * 복습 카드 채점. quality는 0~3 (0 잊음 · 1 겨우 · 2 무난 · 3 쉽게).
+ * wrote=true 면 손으로 써서 맞힌 경우 — 간격을 더 길게 줍니다.
+ * 한자는 특히 그렇습니다. 읽을 수 있는 것과 쓸 수 있는 것은 다른 기억이에요.
+ */
+export async function reviewCard(cardId, quality, wrote = false) {
   const pool = getPool(); if (!pool) return null;
   await ensureChineseTables();
   const cur = await pool.query(`SELECT * FROM chinese_cards WHERE id=$1`, [cardId]);
   const card = cur.rows[0];
   if (!card) return null;
 
+  const q = Math.max(0, Math.min(3, Number(quality) || 0));
+  const wroteIt = !!wrote && q >= 2;   // 틀린 걸 썼다고 보너스를 주지는 않습니다
   const tierBefore = cardTier(card);
-  const next = sm2(card, Number(quality));
+  const plain = sm2(card, q);                      // 손으로 안 썼다면 받았을 간격
+  const next = sm2(card, q, { wrote: wroteIt });
   await pool.query(
     `UPDATE chinese_cards
      SET ease=$1, interval_days=$2, repetitions=$3, lapses=$4,
          due_at = NOW() + ($5 || ' days')::interval, last_result=$6
      WHERE id=$7`,
     [next.ease, next.interval_days, next.repetitions, next.lapses,
-     String(next.interval_days), quality < 2 ? 'fail' : 'pass', cardId]
+     String(next.interval_days), q < 2 ? 'fail' : (wroteIt ? 'wrote' : 'pass'), cardId]
   );
 
   // 🎮 등급이 실제로 올라갔을 때만 XP — '외웠다는 증거'에 대한 보상입니다
@@ -414,7 +422,12 @@ export async function reviewCard(cardId, quality) {
     xpGained = await grantXp(TIER_XP[tierAfter] || 0, `카드 ${TIERS[tierAfter].label} 도달`, `${cardId}_${tierAfter}`);
     promoted = { from: tierBefore, to: tierAfter, ...TIERS[tierAfter] };
   }
-  return { ...next, hanzi: card.hanzi, tier: tierAfter, promoted, xpGained };
+  return {
+    ...next, hanzi: card.hanzi, tier: tierAfter, promoted, xpGained,
+    wrote: wroteIt, nextInDays: next.interval_days,
+    // 손으로 써서 며칠을 벌었는지 — 이게 학습자가 보는 실제 보상입니다
+    daysGained: wroteIt ? Math.round((next.interval_days - plain.interval_days) * 10) / 10 : 0,
+  };
 }
 
 // ═══════════════════════════════════════════════════

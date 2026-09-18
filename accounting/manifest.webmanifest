@@ -1,0 +1,26 @@
+{
+  "name": "한세진의 회계 노트",
+  "short_name": "회계",
+  "description": "직장인이여 회계하라 69장 — 회계사이자 같은 편, 한세진과 함께",
+  "start_url": "/accounting/",
+  "scope": "/accounting/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121815",
+  "theme_color": "#121815",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/accounting/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/accounting/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
