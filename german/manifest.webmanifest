@@ -1,0 +1,26 @@
+{
+  "name": "레나의 독일어 노트",
+  "short_name": "독일어",
+  "description": "Übungsgrammatik 64장 — 조교이자 스파링 파트너 레나와 함께",
+  "start_url": "/german/",
+  "scope": "/german/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14161C",
+  "theme_color": "#14161C",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/german/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/german/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -4,6 +4,28 @@
     "api/cron.js": { "maxDuration": 60 },
     "api/school.js": { "maxDuration": 60 }
   },
+  "headers": [
+    {
+      "source": "/(german|math|chinese|school)/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/(german|math|chinese|school)/manifest.webmanifest",
+      "headers": [
+        { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/(german|math|chinese|school)/icon-(.*).png",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=604800" }
+      ]
+    }
+  ],
   "crons": [
     {
       "path": "/api/cron?job=daily",
