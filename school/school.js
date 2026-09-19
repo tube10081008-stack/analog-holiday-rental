@@ -74,6 +74,7 @@ async function loadTab(tab) {
   try {
     if (tab === 'today') await renderToday();
     else if (tab === 'history') await renderHistory();
+    else if (tab === 'team') await renderTeam();
     else await renderRank();
   } catch (err) {
     $('#view').innerHTML = `<div class="card"><p class="block-body">${esc(err.message)}</p>
@@ -318,6 +319,113 @@ async function renderRank() {
         : `<div class="empty">아직 판정된 예측이 없습니다.<br/>near 예측은 7일 뒤부터 채점됩니다.</div>`}
       ${d.unranked?.length ? `<p class="hint" style="margin-top:14px">대기 중: ${d.unranked.map(u => esc(u.name)).join(', ')}</p>` : ''}
     </div>`;
+}
+
+/* ── 👥 팀원 현황 ──
+   다섯 명이 지금 어디쯤 와 있나를 한 화면에.
+   전에는 관리자 키로 엔드포인트 세 개를 따로 불러 눈으로 합쳐야 했습니다. */
+
+const AGO = (t) => {
+  if (!t) return '기록 없음';
+  const h = Math.floor((Date.now() - new Date(t)) / 3600000);
+  if (h < 1) return '방금';
+  if (h < 24) return `${h}시간 전`;
+  const d = Math.floor(h / 24);
+  return d < 30 ? `${d}일 전` : `${Math.floor(d / 30)}개월 전`;
+};
+
+/** 마지막 학습이 언제였나로 크론이 살아 있는지 판단합니다 */
+function pulse(t) {
+  if (!t) return { cls: 'dead', label: '기록 없음' };
+  const d = (Date.now() - new Date(t)) / 86400000;
+  if (d <= 3) return { cls: 'alive', label: AGO(t) };      // 순번이 5일에 2번이라 3일은 정상
+  if (d <= 7) return { cls: 'slow', label: AGO(t) };
+  return { cls: 'dead', label: AGO(t) };
+}
+
+const TYPE_LABEL = { fact: '지식', policy: '규칙', event: '사건',
+                     preference: '취향', relation: '관계' };
+
+async function renderTeam() {
+  const d = await api('?action=team');
+  const team = d.team || [];
+  const p = d.pace || {};
+
+  // 크론이 며칠째 안 돌았는지 — 한 명이라도 멈췄으면 위에서 먼저 알려줍니다
+  const stalled = team.filter(a => pulse(a.lastMemoryAt).cls === 'dead');
+
+  $('#view').innerHTML = `
+    <div class="card fade-in">
+      <p class="card-eyebrow">TEAM · 팀원 학습 현황</p>
+      <h2>다섯 명이 지금 어디쯤</h2>
+      <p class="hint" style="margin-bottom:6px">
+        로테이션은 하루 <b>${p.agentsPerRun ?? 2}명</b>이라 한 사람은
+        <b>${p.turnEveryDays ?? 2.5}일에 한 번</b> 순번이 돌아옵니다.
+        나머지는 쉽니다 — 느린 게 아니라 그렇게 설계돼 있어요.</p>
+      ${stalled.length ? `
+        <div class="team-alert">
+          ⚠️ <b>${stalled.map(a => esc(a.name)).join(', ')}</b>
+          — 7일 넘게 새 기억이 없습니다. 크론이 멈췄거나 생성이 계속 실패했을 수 있어요.
+        </div>` : ''}
+    </div>
+
+    ${team.map(a => {
+      const pl = pulse(a.lastMemoryAt);
+      const pr = a.predictions;
+      const gpa = a.recentGpa?.[0];
+      return `
+      <div class="card team-card fade-in">
+        <div class="team-head">
+          <div>
+            <span class="team-name">${esc(a.name)}</span>
+            <span class="team-role">${esc(a.title || '')}</span>
+          </div>
+          <span class="team-pulse ${pl.cls}">${pl.label}</span>
+        </div>
+        <p class="team-degree">${esc(a.degree || '')}${a.school ? ` · ${esc(a.school)}` : ''}</p>
+
+        <div class="team-bar">
+          <i style="width:${Math.min(100, a.basicPercent || 0)}%"></i>
+        </div>
+        <div class="team-prog">
+          <span><b>${a.basic ?? 0}</b> / ${a.totalTopics ?? 0} 기초</span>
+          ${a.advanced ? `<span class="team-adv">심화 ${a.advanced}</span>` : ''}
+          <span class="team-round">${esc(a.progressLabel || '-')}</span>
+          ${a.daysToFinishBasic ? `<span class="team-eta">1회차까지 ${a.daysToFinishBasic}일</span>` : ''}
+        </div>
+
+        ${a.nextTopic ? `
+          <p class="team-next">다음 → <b>${esc(a.nextTopic)}</b>
+            ${a.nextSemester ? `<i>${esc(a.nextSemester)}</i>` : ''}</p>` : ''}
+
+        <div class="team-grid">
+          <div class="team-cell">
+            <b>${a.totalMemories ?? 0}</b><span>기억</span>
+            ${(a.byType || []).length ? `<i>${a.byType.slice(0, 3)
+              .map(t => `${TYPE_LABEL[t.memory_type] || t.memory_type} ${t.count}`).join(' · ')}</i>` : ''}
+          </div>
+          <div class="team-cell">
+            <b>${pr?.resolved ? pr.avgBrier : '—'}</b><span>브라이어</span>
+            <i>${pr?.resolved ? `${pr.resolved}건 판정 · 적중 ${Math.round((pr.hitRate || 0) * 100)}%`
+                              : `미판정 ${pr?.open ?? 0}건`}</i>
+          </div>
+          <div class="team-cell">
+            <b>${gpa?.gpa != null ? Number(gpa.gpa).toFixed(2) : '—'}</b><span>최근 GPA</span>
+            ${gpa?.topic ? `<i>${esc(String(gpa.topic).slice(0, 18))}</i>` : ''}
+          </div>
+        </div>
+
+        ${(a.recentTopics || []).length ? `
+          <details class="team-recent">
+            <summary>최근 배운 것 ${a.recentTopics.length}개</summary>
+            ${a.recentTopics.map(t => `<div class="team-topic">${esc(t)}</div>`).join('')}
+          </details>` : ''}
+      </div>`;
+    }).join('')}
+
+    <p class="hint" style="text-align:center;margin-top:4px">
+      ${d.generatedAt ? new Date(d.generatedAt).toLocaleString('ko-KR') : ''} 기준 ·
+      이 화면은 조회만 합니다 (AI 호출 없음)</p>`;
 }
 
 /* ── 부팅 ── */
