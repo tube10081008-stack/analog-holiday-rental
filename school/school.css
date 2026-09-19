@@ -181,3 +181,105 @@ select.field {
   .stat-strip { gap: 12px; }
   .stat b { font-size: 15px; }
 }
+
+/* ═══════════════════════════════════════════════
+   👥 팀원 현황
+   다섯 명이 지금 어디쯤 와 있나를 한 화면에.
+   전에는 관리자 키로 엔드포인트 세 개를 따로 불러 눈으로 합쳐야 했습니다.
+   ═══════════════════════════════════════════════ */
+
+/* 한 명이라도 학습이 멈췄으면 카드보다 먼저 알려줍니다 */
+.team-alert {
+  margin-top: 12px; padding: 11px 13px; border-radius: 11px; word-break: keep-all;
+  background: color-mix(in srgb, var(--red) 12%, var(--ink-2));
+  border: 1px solid color-mix(in srgb, var(--red) 40%, var(--line));
+  font-size: 13px; line-height: 1.6;
+}
+
+.team-card { margin-bottom: 10px; }
+.team-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+}
+.team-name { font-family: var(--serif); font-size: 18px; font-weight: 700; }
+.team-role { font-size: 11.5px; color: var(--paper-dim); margin-left: 7px; }
+.team-degree { font-size: 11.5px; color: var(--paper-faint); margin: 2px 0 12px; }
+
+/* 마지막 학습 시각 — 순번이 5일에 2번이라 3일까지는 정상입니다 */
+.team-pulse {
+  flex: 0 0 auto; font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+}
+.team-pulse.alive { color: var(--green); background: color-mix(in srgb, var(--green) 15%, transparent); }
+.team-pulse.slow  { color: var(--brass); background: color-mix(in srgb, var(--brass) 15%, transparent); }
+.team-pulse.dead  { color: var(--red);   background: color-mix(in srgb, var(--red) 15%, transparent); }
+
+/* 진도 막대 — 1회차(기초) 기준 */
+.team-bar {
+  height: 7px; border-radius: 999px; background: var(--ink-2);
+  overflow: hidden; border: 1px solid var(--line);
+}
+.team-bar i {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--brass-dim), var(--brass));
+  transition: width .4s ease;
+}
+.team-prog {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px;
+  margin-top: 7px; font-size: 12px; color: var(--paper-dim);
+}
+.team-prog b { color: var(--paper); font-size: 14px; }
+.team-adv {
+  color: var(--brass); font-weight: 600;
+  padding: 1px 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--brass) 14%, transparent);
+}
+.team-round { color: var(--paper-faint); }
+.team-eta { margin-left: auto; color: var(--paper-faint); font-size: 11px; }
+
+.team-next {
+  margin-top: 9px; font-size: 12.5px; color: var(--paper-dim);
+  line-height: 1.6; word-break: keep-all;
+}
+.team-next b { color: var(--paper); }
+.team-next i {
+  display: block; font-style: normal; font-size: 11px; color: var(--paper-faint);
+}
+
+/* 숫자 세 칸 — 좁은 화면에서도 가로 스크롤 없이 */
+.team-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px; margin-top: 13px;
+}
+.team-cell {
+  min-width: 0; padding: 9px 8px; border-radius: 10px;
+  background: var(--ink-2); border: 1px solid var(--line); text-align: center;
+}
+.team-cell b { display: block; font-size: 17px; font-family: var(--serif); }
+.team-cell span { display: block; font-size: 10.5px; color: var(--paper-dim); margin-top: 1px; }
+.team-cell i {
+  display: block; font-style: normal; font-size: 10px; color: var(--paper-faint);
+  margin-top: 4px; line-height: 1.45;
+  /* 한국어는 어절 단위로 끊어야 읽힙니다.
+     overflow-wrap:anywhere만 쓰면 '사건 2'가 '사 / 건 2'로 잘립니다. */
+  word-break: keep-all; overflow-wrap: break-word;
+}
+
+.team-recent { margin-top: 11px; }
+.team-recent summary {
+  cursor: pointer; font-size: 12px; color: var(--paper-dim);
+  list-style: none; padding: 4px 0;
+}
+.team-recent summary::-webkit-details-marker { display: none; }
+.team-recent summary::before { content: '▸ '; color: var(--brass); }
+.team-recent[open] summary::before { content: '▾ '; }
+.team-topic {
+  font-size: 12px; color: var(--paper-dim); padding: 5px 0 5px 14px;
+  border-left: 2px solid var(--line); margin-top: 3px; line-height: 1.5;
+  word-break: keep-all; overflow-wrap: break-word;
+}
+
+@media (max-width: 380px) {
+  /* 아주 좁은 화면에서는 숫자 칸을 두 줄로 */
+  .team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

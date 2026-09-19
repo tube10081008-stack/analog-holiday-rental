@@ -96,6 +96,12 @@ export default async function handler(req, res) {
       if (action === "today") return await handleToday(res);
       if (action === "history") return json(res, 200, { ok: true, history: await getHistory(30), stats: await getSchoolStats() });
       if (action === "leaderboard") return await handleLeaderboard(res);
+      // 👥 팀원 현황 — 조회 전용이라 LLM을 부르지 않습니다.
+      //    (현황을 보는 데 돈이 들면 자주 안 보게 됩니다)
+      if (action === "team") {
+        const { getTeamStatus } = await import("./_lib/team.js");
+        return json(res, 200, { ok: true, ...(await getTeamStatus()) });
+      }
       return json(res, 400, { ok: false, message: "알 수 없는 action" });
     }
 
