@@ -513,6 +513,8 @@ const ROOMS = {
     lessonExtra: () => ({}),
     labels: { intro: '도입 — 이 규칙이 왜 생겼나', warmup: '준비운동 — 되짚을 것',
               concept: '핵심 설명', walkthrough: '문장 해부' },
+    // 독일어 노트 과제는 '베껴 쓰기'라 답이 이미 수업 본문에 있습니다. 연습장이 필요 없습니다.
+    practice: false,
   },
   accounting: {
     course: 'accounting',
@@ -526,6 +528,8 @@ const ROOMS = {
     lessonExtra: () => ({}),
     labels: { intro: '도입 — 이 장치가 왜 생겼나', warmup: '준비운동 — 되짚을 것',
               concept: '핵심 설명', walkthrough: '거래 해부' },
+    // 회계 노트 과제는 '풀어야 하는 문제'입니다. 확인할 장치가 없으면 막힌 채로 끝납니다.
+    practice: true,
   },
   math: {
     course: 'math',
@@ -543,6 +547,7 @@ const ROOMS = {
     lessonExtra: (row) => ({ formulas: parseJ(row.formulas) || [] }),
     labels: { intro: '도입 — 이 개념이 왜 필요했나', warmup: '준비운동 — 선수 개념',
               concept: '개념 설명', walkthrough: '함께 풀어보기' },
+    practice: true,
   },
 };
 
@@ -631,6 +636,23 @@ async function handleRoom(req, res, query, body, me, ROOM) {
       return json(res, 200, { ok: true, pages: idx.pages, notebookStats: idx.stats,
         kinds: NB.TASK_KINDS,
         stats: await GE.getStats(uid), xp: await GE.getXpState(uid) });
+    }
+
+    // 📝 연습장 — 노트 과제의 모범답안과 문답 (회계·수학만)
+    if (action === "practice") {
+      if (!ROOM.practice) return json(res, 404, { ok: false, message: "이 교실에는 연습장이 없어요." });
+      const PR = await import("./_lib/practice.js");
+      await PR.ensurePracticeTables();
+      if (query.taskId) {
+        const th = await PR.getThread(uid, course, query.taskId);
+        if (!th) return json(res, 404, { ok: false, message: "그런 과제가 없어요." });
+        return json(res, 200, { ok: true, thread: th, kinds: NB.TASK_KINDS });
+      }
+      // 라벨·아이콘은 화면이 아니라 여기서 붙입니다 (노트 탭과 같은 방식)
+      const tasks = (await PR.getPracticeList(uid, course))
+        .map(t => ({ ...t, ...(NB.TASK_KINDS[t.kind] || {}) }));
+      return json(res, 200, { ok: true, tasks,
+        kinds: NB.TASK_KINDS, stats: await GE.getStats(uid), xp: await GE.getXpState(uid) });
     }
 
     if (action === "map") {
@@ -829,6 +851,8 @@ async function handleRoom(req, res, query, body, me, ROOM) {
         nbTasks = NB.deriveTasks(course, meta, {
           concept: lesson.concept, walkthrough: parseJ(lesson.walkthrough) || {},
           cards: lessonCards,
+          // 확인 문제의 정답을 모범답안으로 쓰기 위해 함께 넘깁니다 (LLM 호출 없음)
+          problems: parseJ(lesson.problems) || [],
         });
       }
       const notebookIssued = await NB.issueTasks(uid, course, meta, nbTasks);
@@ -845,6 +869,36 @@ async function handleRoom(req, res, query, body, me, ROOM) {
       const out = await GE.reviewCard(uid, body.cardId, Number(body.quality), !!body.wrote);
       if (!out) return json(res, 404, { ok: false, message: "카드를 찾을 수 없습니다." });
       return json(res, 200, { ok: true, ...out, xp: await GE.getXpState(uid) });
+    }
+
+    /* 📝 연습장 ── */
+    if (body.action === "practice-reveal" || body.action === "practice-ask") {
+      if (!ROOM.practice) return json(res, 404, { ok: false, message: "이 교실에는 연습장이 없어요." });
+      const PR = await import("./_lib/practice.js");
+      await PR.ensurePracticeTables();
+
+      // 과제가 달린 장을 찾아 페르소나에 맥락으로 넘깁니다
+      const meta = await (async () => {
+        const th = await PR.getThread(uid, course, body.taskId);
+        if (!th) return null;
+        return GE.CHAPTERS.find(c => c.no === th.chapterNo)
+          || { no: th.chapterNo, sec: th.sec, title: th.title, unit: '' };
+      })();
+      if (!meta) return json(res, 404, { ok: false, message: "그런 과제가 없어요." });
+      const label = NB.TASK_KINDS[body.kind]?.label || '';
+
+      if (body.action === "practice-reveal") {
+        const out = await PR.reveal({ userId: uid, course, taskId: body.taskId,
+          persona: GE.persona, chapter: meta, label });
+        if (!out) return json(res, 404, { ok: false, message: "그런 과제가 없어요." });
+        return json(res, 200, { ok: true, ...out });
+      }
+
+      const out = await PR.ask({ userId: uid, course, taskId: body.taskId,
+        question: body.question, persona: GE.persona, chapter: meta, label });
+      if (!out) return json(res, 404, { ok: false, message: "그런 과제가 없어요." });
+      if (out.error) return json(res, 400, { ok: false, message: out.error });
+      return json(res, 200, { ok: true, ...out });
     }
 
     if (body.action === "notebook-done") {

@@ -111,6 +111,7 @@ async function loadTab(tab) {
     else if (tab === 'review') await renderReview();
     else if (tab === 'collection') await renderCollection();
     else if (tab === 'notebook') await renderNotebook();
+    else if (tab === 'practice') await renderPractice();
     else if (tab === 'together') await renderTogether();
     else await renderGaps();
   } catch (err) {
@@ -862,6 +863,146 @@ async function renderCollection() {
         <div class="unit-head">자리 미정 계정 <span class="unit-n">${kinds.account.filter(c => !c.side).length}</span></div>
         <div class="col-grid">${kinds.account.filter(c => !c.side).map(chip).join('')}</div>` : ''}
     </div>`;
+}
+
+const TEACHER_NAME = '세진';
+
+/* ═══ 📝 연습장 — 손으로 푼 걸 확인하고, 막힌 걸 물어보는 자리 ═══
+   오늘 수업은 건드리지 않습니다. 질문이 수업 화면을 잠식하면 주객이 전도돼서요. */
+let pracTasks = [];
+let pracOpen = null;      // 펼쳐둔 과제 id
+
+async function renderPractice() {
+  const d = await api('?action=practice');
+  pracTasks = d.tasks || [];
+  renderStats(d.stats, d.xp);
+  if (!pracTasks.length) {
+    $('#view').innerHTML = `
+      <div class="card fade-in center">
+        <div class="done-mark">📝</div>
+        <h2>아직 연습할 것이 없어요</h2>
+        <p class="hint">장을 마치면 노트 과제가 쌓이고,<br/>
+          여기서 <b>모범풀이를 펼쳐 맞춰보고</b> 막힌 걸 물어볼 수 있습니다.</p>
+      </div>`;
+    return;
+  }
+  drawPracticeList();
+}
+
+function drawPracticeList() {
+  const byCh = {};
+  pracTasks.forEach(t => (byCh[t.chapterNo] ||= []).push(t));
+
+  $('#view').innerHTML = `
+    <div class="card fade-in">
+      <p class="card-eyebrow">연습장</p>
+      <p class="hint">노트에 <b>먼저 손으로 푼 뒤</b> 펼쳐서 맞춰보세요.
+        바로 보면 베껴 쓰기가 되어버려서 한 번 누르게 해뒀어요.
+        답을 본 뒤에도 <b>이어서 물어볼 수 있습니다.</b></p>
+    </div>
+    ${Object.keys(byCh).sort((a, b) => b - a).map(no => `
+      <div class="card prac-group fade-in">
+        <div class="prac-ch">${esc(byCh[no][0].sec)} · ${esc(byCh[no][0].title)}</div>
+        ${byCh[no].map(t => `
+          <div class="prac-row ${t.revealed ? 'seen' : ''}" data-task="${esc(t.id)}">
+            <div class="prac-head">
+              <span class="nb-icon">${esc(t.icon || '·')}</span>
+              <span class="prac-label">${esc(t.label || t.kind)}</span>
+              ${t.revealed ? `<span class="prac-flag">펼쳐봄</span>` : ''}
+              ${t.msgCount ? `<span class="prac-msgs">💬 ${Math.floor(t.msgCount / 2)}</span>` : ''}
+            </div>
+            <p class="prac-spec">${esc(t.spec)}</p>
+            <button class="btn-prac" data-open="${esc(t.id)}">
+              ${t.revealed ? '다시 보기' : '✍️ 제가 먼저 풀어봤어요'}</button>
+            <div class="prac-body" id="pb-${esc(t.id)}"></div>
+          </div>`).join('')}
+      </div>`).join('')}`;
+
+  document.querySelectorAll('[data-open]').forEach(b =>
+    b.addEventListener('click', () => openPractice(b.dataset.open, b)));
+}
+
+/** 화면이 이미 '모범풀이' 딱지를 붙이므로, 본문이 같은 제목으로 시작하면 걷어냅니다 */
+const stripAnswerHead = (s) =>
+  String(s || '').replace(/^\s*#{1,4}\s*(모범\s*풀이|모범\s*답안|정답|답)\s*\n+/, '');
+
+async function openPractice(taskId, btn) {
+  const box = document.getElementById(`pb-${taskId}`);
+  if (!box) return;
+  if (box.dataset.open === '1') {           // 접기
+    box.innerHTML = ''; box.dataset.open = '';
+    btn.textContent = '다시 보기';
+    return;
+  }
+  const task = pracTasks.find(t => t.id === taskId);
+  btn.disabled = true;
+  btn.textContent = task?.hasAnswer ? '펼치는 중…' : '모범풀이를 만드는 중…';
+  try {
+    const d = await post({ action: 'practice-reveal', taskId, kind: task?.kind });
+    box.dataset.open = '1';
+    pracOpen = taskId;
+    if (task) task.revealed = true;
+    box.innerHTML = `
+      ${d.answer ? `
+        <div class="prac-answer">
+          <span class="lab">📋 모범풀이</span>
+          <div class="prose">${md(stripAnswerHead(d.answer))}</div>
+        </div>`
+        : `<p class="hint">모범풀이를 만들지 못했어요. 아래에서 직접 물어봐 주세요.</p>`}
+      <div class="prac-chat" id="pc-${esc(taskId)}">
+        ${(d.messages || []).map(m => chatBubble(m)).join('')}
+      </div>
+      <div class="prac-ask">
+        <textarea id="pq-${esc(taskId)}" rows="2"
+          placeholder="제 풀이를 적어 올리면 채점해드려요. 궁금한 걸 물어도 돼요."></textarea>
+        <button class="btn-primary btn-send" data-send="${esc(taskId)}">보내기</button>
+      </div>`;
+    markScrollableBoards();
+    box.querySelector('[data-send]').addEventListener('click', () => sendPractice(taskId));
+    btn.textContent = '접기';
+  } catch (err) {
+    box.innerHTML = `<p class="hint">${esc(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+const chatBubble = (m) => `
+  <div class="pc-msg ${m.role === 'user' ? 'me' : 'teacher'}">
+    <span class="pc-who">${m.role === 'user' ? '나' : TEACHER_NAME}</span>
+    <div class="prose">${md(m.content)}</div>
+  </div>`;
+
+async function sendPractice(taskId) {
+  const ta = document.getElementById(`pq-${taskId}`);
+  const chat = document.getElementById(`pc-${taskId}`);
+  const btn = document.querySelector(`[data-send="${taskId}"]`);
+  const q = (ta?.value || '').trim();
+  if (!q) { ta?.focus(); return; }
+  const task = pracTasks.find(t => t.id === taskId);
+
+  chat.insertAdjacentHTML('beforeend', chatBubble({ role: 'user', content: q }));
+  ta.value = '';
+  btn.disabled = true; btn.textContent = `${TEACHER_NAME}이 보는 중…`;
+  chat.insertAdjacentHTML('beforeend',
+    `<div class="pc-msg teacher pc-wait" id="pw-${taskId}"><span class="pc-who">${TEACHER_NAME}</span>
+     <div class="prose">…</div></div>`);
+  chat.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  try {
+    const d = await post({ action: 'practice-ask', taskId, question: q, kind: task?.kind });
+    document.getElementById(`pw-${taskId}`)?.remove();
+    chat.insertAdjacentHTML('beforeend', chatBubble({ role: 'teacher', content: d.reply }));
+    if (task) task.msgCount = (task.msgCount || 0) + 2;
+    markScrollableBoards();
+    chat.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err) {
+    document.getElementById(`pw-${taskId}`)?.remove();
+    chat.insertAdjacentHTML('beforeend',
+      `<p class="hint">${esc(err.message)}</p>`);
+  } finally {
+    btn.disabled = false; btn.textContent = '보내기';
+  }
 }
 
 /* ═══ 약한 곳 ═══ */

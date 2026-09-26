@@ -83,6 +83,9 @@ const NOTEBOOK_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_nb_open ON notebook_tasks(course, status, issued_at)`,
   `CREATE INDEX IF NOT EXISTS idx_nb_ch ON notebook_tasks(course, chapter_no)`,
   `CREATE INDEX IF NOT EXISTS idx_nb_user ON notebook_tasks(user_id, course, status)`,
+  // 📋 모범답안 — 수업이 과제를 낼 때 답도 같이 냅니다.
+  //    비어 있으면 연습장에서 처음 펼칠 때 한 번만 만들어 여기 채워 넣습니다.
+  `ALTER TABLE notebook_tasks ADD COLUMN IF NOT EXISTS answer_key TEXT NOT NULL DEFAULT ''`,
 ];
 
 /**
@@ -95,7 +98,9 @@ const taskId = (userId, course, chapterNo, kind, spec) =>
 /**
  * 쓰기 과제를 발행합니다 (장을 마칠 때 호출).
  * @param chapter { no, sec, title }
- * @param tasks   [{ kind, spec, target }]
+ * @param tasks   [{ kind, spec, target, answer }]
+ *                answer는 모범풀이입니다. 수업이 안 주면 빈 문자열로 두고,
+ *                연습장에서 처음 펼칠 때 만들어 채웁니다.
  */
 export async function issueTasks(userId, course, chapter, tasks) {
   const pool = getPool();
@@ -110,10 +115,11 @@ export async function issueTasks(userId, course, chapter, tasks) {
     const id = taskId(userId, course, chapter.no, kind, spec);
     try {
       const r = await pool.query(
-        `INSERT INTO notebook_tasks (id, user_id, course, chapter_no, sec, title, kind, spec, target)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING`,
+        `INSERT INTO notebook_tasks
+           (id, user_id, course, chapter_no, sec, title, kind, spec, target, answer_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING`,
         [id, userId, course, chapter.no, chapter.sec || String(chapter.no), chapter.title || '',
-         kind, spec.slice(0, 400), target]);
+         kind, spec.slice(0, 400), target, String(t.answer || '').slice(0, 2000)]);
       if (r.rowCount > 0) n++;
     } catch { /* skip */ }
   }
@@ -184,7 +190,10 @@ export async function getIndex(userId, course, limit = 200) {
   const pool = getPool(); if (!pool) return { pages: [], stats: { open: 0, done: 0 } };
   await ensureNotebookTables();
   const r = await pool.query(
-    `SELECT * FROM notebook_tasks WHERE user_id=$1 AND course=$2
+    // ⚠️ answer_key는 일부러 뺍니다. '내 노트'는 게이트가 없는 화면이라
+    //    여기로 답안이 흘러나가면 연습장의 '먼저 풀기'가 무의미해집니다.
+    `SELECT id, chapter_no, sec, title, kind, spec, target, done, status, photo_url, issued_at
+       FROM notebook_tasks WHERE user_id=$1 AND course=$2
      ORDER BY chapter_no, issued_at LIMIT $3`, [userId, course, limit]);
   const byChapter = new Map();
   let open = 0, done = 0;
@@ -255,33 +264,66 @@ export function deriveTasks(course, chapter, lesson = {}) {
   const tasks = [];
   const cards = Array.isArray(lesson.cards) ? lesson.cards
               : Array.isArray(lesson.formulas) ? lesson.formulas : [];
+  const problems = Array.isArray(lesson.problems) ? lesson.problems : [];
+
+  /**
+   * 📋 확인 문제의 정답을 그대로 모범답안으로 씁니다 — LLM 추가 호출 없이.
+   * '확인 문제를 다시 푸세요' 같은 과제는 지시문만으론 답을 만들 수 없습니다.
+   * 수업이 이미 갖고 있는 정답을 붙여주는 게 정확하고 공짜입니다.
+   * (풀이 과정까지 필요하면 연습장에서 선생에게 물어보면 됩니다)
+   */
+  const answerFromProblems = () => problems
+    .filter(p => p?.question && p?.answer)
+    .map((p, i) => `**${i + 1}.** ${p.question}\n\n→ **정답:** ${p.answer}`)
+    .join('\n\n');
+  const cardAnswer = () => cards
+    .filter(c => (c.front || c.title))
+    .map(c => `**${c.front || c.title}** — ${c.back || c.body || ''}`)
+    .join('\n');
   const hasBoard = /```(?:판서|board)/.test(String(lesson.concept || ''))
     || (lesson.walkthrough?.steps || []).some(s => s?.board);
+
+  /**
+   * 옮겨 그리기 과제의 모범답안은 **수업에 있던 그 판서**입니다.
+   * 새로 만들 이유가 없으니 그대로 가져옵니다 (LLM 호출 0).
+   */
+  const boardAnswer = () => {
+    const blocks = [...String(lesson.concept || '')
+      .matchAll(/```(?:판서|board)\n([\s\S]*?)```/g)].map(m => m[1].trimEnd());
+    const last = (lesson.walkthrough?.steps || []).filter(s => s?.board).slice(-1)[0];
+    if (last) blocks.push(String(last.board).trimEnd());
+    return blocks.length ? blocks.map(b => '```판서\n' + b + '\n```').join('\n\n') : '';
+  };
 
   if (hasBoard) {
     tasks.push(course === 'accounting'
       ? { kind: 'statement', target: 3,
-          spec: `${chapter.title}의 표를 노트에 옮겨 그리고, 금액을 가린 채로 채우기를 반복하세요.` }
+          spec: `${chapter.title}의 표를 노트에 옮겨 그리고, 금액을 가린 채로 채우기를 반복하세요.`,
+          answer: boardAnswer() }
       : { kind: 'table', target: 3,
-          spec: `${chapter.title}의 표를 노트에 옮겨 그리고, 가린 채로 채우기를 반복하세요.` });
+          spec: `${chapter.title}의 표를 노트에 옮겨 그리고, 가린 채로 채우기를 반복하세요.`,
+          answer: boardAnswer() });
   }
   if (cards.length) {
     const names = cards.map(c => c.front || c.title).filter(Boolean).slice(0, 4).join(', ');
     // 수학 공식은 옮겨 적는 것보다 **다시 끌어내 보는 것**이 남습니다
     if (course === 'math') {
       tasks.push({ kind: 'derive', target: 3,
-        spec: `오늘 나온 공식을 노트에 처음부터 유도해 보세요${names ? ` — ${names}` : ''}. 외워서 쓰지 말고요.` });
+        spec: `오늘 나온 공식을 노트에 처음부터 유도해 보세요${names ? ` — ${names}` : ''}. 외워서 쓰지 말고요.`,
+        answer: cardAnswer() });
     } else {
       const kind = course === 'chinese' ? 'hanzi'
                  : course === 'accounting' ? 'accounts' : 'sentences';
       tasks.push({ kind, target: 2,
-        spec: `오늘 나온 것을 노트에 옮겨 적으세요${names ? ` — ${names}` : ''}.` });
+        spec: `오늘 나온 것을 노트에 옮겨 적으세요${names ? ` — ${names}` : ''}.`,
+        answer: cardAnswer() });
     }
   }
   if (!tasks.length) {
     tasks.push(course === 'math'
       ? { kind: 'solve', target: 2,
-          spec: `${chapter.title}의 확인 문제를 노트에 손으로 다시 풀어보세요. 넘어가는 줄을 다 남기고요.` }
+          spec: `${chapter.title}의 확인 문제를 노트에 손으로 다시 풀어보세요. 넘어가는 줄을 다 남기고요.`,
+          answer: answerFromProblems() }
       : { kind: 'sentences', target: 1,
           spec: `${chapter.title}에서 가장 헷갈렸던 부분을 노트에 정리하세요.` });
   }
@@ -310,5 +352,7 @@ export function errorTask(correctAnswer) {
     spec: ans
       ? `오늘 틀린 문제를 노트에 다시 쓰세요 — 정답 "${ans}"을(를) 세 번 쓰고, 왜 틀렸는지 한 줄로 적으세요.`
       : `오늘 틀린 문제를 노트에 다시 쓰고, 왜 틀렸는지 한 줄로 적으세요.`,
+    // 오답 과제는 정답이 지시문에 이미 들어 있습니다. 연습장에서도 같은 걸 보여줍니다.
+    answer: ans ? `**정답:** ${correctAnswer}` : '',
   };
 }
