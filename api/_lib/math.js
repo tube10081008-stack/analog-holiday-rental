@@ -298,6 +298,12 @@ LaTeX를 쓰지 마세요. 유니코드로 씁니다.
 - 기타: ≠ ≤ ≥ ± ∞ ∈ ⊂ ∪ ∩ → ⇔ ∅ ∑
 - 강조는 **굵게** 만 사용합니다.`;
 
+/**
+ * 방(room) 런타임이 페르소나를 ROOM.persona로 넘겨받으려고 CHLOE_FOR_PEER라는
+ * 이름을 씁니다. 이 파일 안에서는 계속 CHLOE로 부릅니다 — 독일어·회계와 같은 방식.
+ */
+const CHLOE = CHLOE_FOR_PEER;
+
 /** 한 챕터의 수업 전체를 생성합니다 (도입 → 개념 → 확인문제 → 요약) */
 export async function generateLesson(chapter, priorContext) {
   const prompt = `## 오늘 다룰 챕터
@@ -313,9 +319,12 @@ ${priorContext}
 역사적 배경이나 실생활 맥락으로 이 개념이 **왜 필요했는지**를 이야기하세요.
 정의를 먼저 던지지 마세요. 500~800자.
 
-### warmup (준비운동 · 선수 개념 2~3개)
-오늘 내용을 이해하려면 **미리 튼튼해야 하는 중학 개념**을 골라 되짚어 줍니다.
+### warmup (준비운동 · 선수 개념 0~3개)
+오늘 내용을 이해하려면 **미리 튼튼해야 하는 것**을 골라 되짚어 줍니다.
 틀린 뒤에 고치는 게 아니라, 들어가기 전에 미리 깔아주는 단계입니다.
+⚠️ **위 '바로 앞 5장'에 있는 것을 먼저 보세요.** 거기서 오늘 쓰이는 게 있으면 그걸 쓰고,
+없을 때만 중학 개념으로 내려가세요. 오늘 쓸 게 없으면 **빈 배열([])**도 좋습니다.
+매 장 같은 기초로 되돌아가면 학습자는 진도가 안 나가는 느낌을 받습니다.
 각 항목:
 - concept: 개념 이름 (예: "지수법칙 — 같은 밑끼리 곱하면 지수를 더한다")
 - refresher: **150~250자**로 다시 설명. 정의만 던지지 말고 구체적인 숫자 예시를 꼭 넣으세요.
@@ -662,6 +671,24 @@ export async function addFormulaCards(userId, formulas, chapterNo) {
     } catch { /* skip */ }
   }
   return n;
+}
+
+/**
+ * 도감 — 지금까지 모은 공식 전부.
+ * 수학 화면에는 도감 탭이 없지만, 수업을 만들 때
+ * "이미 가진 공식은 다시 카드로 만들지 마세요"를 넘기는 데 씁니다.
+ * 회계·독일어의 getCollection과 모양을 맞춰 둡니다 ({ kinds, total }).
+ */
+export async function getCollection(userId) {
+  const pool = getPool(); if (!pool) return { kinds: {}, total: 0 };
+  await ensureMathTables();
+  const r = await pool.query(
+    `SELECT id, title, body, note, chapter_no FROM math_cards
+      WHERE user_id=$1 ORDER BY chapter_no, created_at`, [userId]);
+  const items = r.rows.map(c => ({
+    id: c.id, front: c.title, back: c.body, note: c.note, chapterNo: c.chapter_no,
+  }));
+  return { kinds: items.length ? { 공식: items } : {}, total: items.length };
 }
 
 export async function getDueCards(userId, limit = 10) {

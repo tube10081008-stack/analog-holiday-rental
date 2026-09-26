@@ -23,6 +23,7 @@ import { AGENT_ROLES } from "./_lib/autonomous-study.js";
 import * as CN from "./_lib/chinese.js";
 import { resolveUser, invite, listUsers, partnersOf, removeUser, rotateKey,
          ensureUserTables } from "./_lib/users.js";
+import { buildPriorContext } from "./_lib/syllabus.js";
 
 function json(res, status, payload) {
   res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
@@ -538,8 +539,10 @@ const ROOMS = {
     // 이름만 맞춰주면 나머지 흐름은 그대로 돕니다.
     adapt: (M) => ({ ...M, ensureTables: M.ensureMathTables,
                      getStats: M.getMathStats, persona: M.CHLOE_FOR_PEER,
-                     addCards: M.addFormulaCards,
-                     TIERS: {}, getCollection: async () => ({ kinds: {}, total: 0 }) }),
+                     // getCollection은 이제 math.js가 진짜로 갖고 있습니다.
+                     // 화면에 도감 탭은 없지만, 수업을 만들 때 '이미 가진 공식'을
+                     // 넘겨야 같은 공식이 매 장 다시 카드로 나오지 않습니다.
+                     addCards: M.addFormulaCards, TIERS: {} }),
     subTitle: () => '',
     chapterSub: () => '',
     cardsOf: (row) => parseJ(row.formulas) || [],
@@ -591,11 +594,16 @@ async function handleRoom(req, res, query, body, me, ROOM) {
           });
           created = true; shared = true;
         } else {
-          const gaps = await GE.getGaps(uid, 6);
-          const priorContext = gaps.length
-            ? `## 지금까지 관찰된 약한 곳 (설명에 자연스럽게 녹여 주세요)\n${
-                gaps.map(g => `- ${g.concept} (${g.times}회)`).join('\n')}`
-            : '## 아직 파악된 약점이 없습니다. 설명하면서 관찰해 주세요.';
+          // 📚 오늘 한 장만 주면 모델은 앞의 35장을 모릅니다. 그래서 매번
+          //    그 분야에서 가장 근본적인 것으로 되돌아가고, 학습자는 한 장씩
+          //    나아가면서도 같은 자리를 맴돕니다. 목차 순서를 같이 넘깁니다.
+          const [gaps, collection, doneNos] = await Promise.all([
+            GE.getGaps(uid, 6),
+            GE.getCollection(uid).catch(() => ({ kinds: {} })),
+            GE.getDoneChapters(uid).catch(() => []),
+          ]);
+          const priorContext = buildPriorContext(GE.CHAPTERS, chapter,
+            { gaps, collection, doneNos });
           const gen = await GE.generateLesson(chapter, priorContext);
           lesson = await GE.createLesson(uid, chapter, gen);
           created = true;
