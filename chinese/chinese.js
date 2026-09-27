@@ -19,6 +19,46 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
 
 /* ── 중국어 TTS ── */
 let zhVoice = null;
+/**
+ * 📓 노트 과제 표시와 조작 — 예전엔 수업 맨 위 배너가 이 일을 했습니다.
+ *
+ * 배너는 가장 오래된 과제 하나를 오늘 수업 도입부에 고정으로 붙였는데,
+ * 한 장을 끝낼 때마다 과제가 최대 4개씩 들어오고 회수는 하루 한 칸이라
+ * 큐가 절대 비지 않았습니다. 몇 주 전 과제가 매일 수업 첫 화면을 차지했습니다.
+ * 이제 수업 화면은 수업만 하고, 과제는 '내 노트'에서 직접 처리합니다.
+ */
+const nbMark = (t) =>
+  t.status === 'skipped' ? '접음'
+  : t.status === 'expired' ? '지났음'
+  : t.target > 1 ? `${t.done}/${t.target}`
+  : (t.done ? '✓' : '─');
+
+/** '내 노트'에서 썼어요·접기를 받습니다 (한 번만 위임해서 걸어둡니다) */
+function wireNotebook(redraw) {
+  const view = $('#view');
+  if (!view || view.dataset.nbWired === '1') return;
+  view.dataset.nbWired = '1';
+  view.addEventListener('click', async (e) => {
+    const btn = e.target.closest?.('[data-act]');
+    if (!btn || !btn.dataset.task) return;
+    const { act, task } = btn.dataset;
+    btn.disabled = true;
+    try {
+      if (act === 'skip') {
+        await post({ action: 'notebook-skip', taskId: task });
+      } else {
+        const r = await post({ action: 'notebook-done', taskId: task });
+        if (r.xpGained) xpToast(r.xpGained, '노트 과제 완료');
+        if (r.xp) renderXp(r.xp);
+      }
+      await redraw();      // 다시 그리면서 뱃지·분모까지 서버 값으로 맞춥니다
+    } catch (err) {
+      btn.disabled = false;
+      console.error(err);
+    }
+  });
+}
+
 function loadVoice() {
   const vs = speechSynthesis.getVoices();
   zhVoice = vs.find(v => /^zh[-_]CN/i.test(v.lang)) || vs.find(v => /^zh/i.test(v.lang)) || null;
@@ -145,55 +185,6 @@ function renderNbBadge(n) {
   if (n > 0) { b.textContent = n; b.hidden = false; } else b.hidden = true;
 }
 
-/** 지난 장면에서 낸 손글씨 과제 회수 — 진도를 막지 않고 물어만 봅니다 */
-function pendingBanner() {
-  if (!pendingTasks.length) return '';
-  const t = pendingTasks[0];
-  return `
-    <div class="nb-recall" data-task="${esc(t.id)}">
-      <div class="nb-recall-head">
-        <span class="nb-icon">${esc(t.icon || '📓')}</span>
-        <span>노트 ${esc(t.sec)} · ${esc(t.label || '')}
-          ${t.daysAgo > 0 ? `<i>${t.daysAgo}일 전에 낸 과제예요</i>` : ''}</span>
-      </div>
-      <p class="nb-spec">${esc(t.spec)}</p>
-      ${t.target > 1 ? `<div class="nb-prog">${
-        Array.from({ length: t.target }, (_, i) =>
-          `<i class="${i < t.done ? 'on' : ''}"></i>`).join('')} <span>${t.done}/${t.target}</span></div>` : ''}
-      <div class="nb-acts">
-        <button class="btn-nb-done" data-act="done">✍️ ${t.target > 1 ? '한 번 더 썼어요' : '썼어요'}</button>
-        <button class="btn-nb-skip" data-act="skip">이건 접을게요</button>
-      </div>
-    </div>`;
-}
-
-function wirePending(redraw) {
-  const box = document.querySelector('.nb-recall');
-  if (!box) return;
-  box.addEventListener('click', async (e) => {
-    const act = e.target.dataset?.act;
-    if (!act) return;
-    const taskId = box.dataset.task;
-    box.querySelectorAll('button').forEach(b => (b.disabled = true));
-    try {
-      if (act === 'skip') {
-        await post({ action: 'notebook-skip', taskId });
-        pendingTasks = pendingTasks.slice(1);
-      } else {
-        const r = await post({ action: 'notebook-done', taskId });
-        if (r.xp) renderXp(r.xp);
-        if (r.closed) pendingTasks = pendingTasks.slice(1);
-        else pendingTasks[0] = { ...pendingTasks[0], done: r.done };
-      }
-      renderNbBadge(pendingTasks.length);
-      redraw();
-    } catch (err) {
-      box.querySelectorAll('button').forEach(b => (b.disabled = false));
-      console.error(err);
-    }
-  });
-}
-
 async function renderToday() {
   const d = await api('?action=today');
   today = d; speechHeard = '';
@@ -242,7 +233,6 @@ function drawToday(d) {
     <div class="card fade-in">
       <p class="card-eyebrow">今天的场景 · 오늘의 장면</p>
       <h2>${esc(S.sceneCn)}<span class="ko">${esc(S.scene)}</span></h2>
-      ${pendingBanner()}
       ${d.priorFocus ? `<p class="hint">📌 지난 수업 지적: ${esc(d.priorFocus)}</p>` : ''}
       <div class="dialogue">${dlg}</div>
       <button class="btn-ghost" onclick="__speak(${JSON.stringify((S.dialogue || []).map(l => l.hanzi).join('。')).replace(/"/g, '&quot;')}, 0.8)">전체 듣기 ▶</button>
@@ -301,7 +291,6 @@ function drawToday(d) {
       await post({ action: 'skip' });
       loadTab('today');
     }));
-  wirePending(() => drawToday(today));
 }
 
 /* ═══ 📓 내 노트 — 앱이 종이 노트의 색인이 됩니다 ═══ */
@@ -323,7 +312,8 @@ async function renderNotebook() {
         페이지 번호는 <b>레벨-장면</b>이에요 — 노트 상단에 그 번호만 적어두세요.</p>
       ${d.pages.map(p => {
         // 접은 과제는 분모에서 뺍니다 — 안 하기로 한 걸 '남은 것'으로 세면 안 되니까요
-        const live = p.tasks.filter(t => t.status !== 'skipped');
+        // 접은 것과 지난 것은 분모에서 뺍니다
+        const live = p.tasks.filter(t => t.status === 'open' || t.status === 'done');
         const total = live.reduce((a, t) => a + t.target, 0);
         const did = live.reduce((a, t) => a + t.done, 0);
         const allDone = p.tasks.every(t => t.status !== 'open');
@@ -338,14 +328,21 @@ async function renderNotebook() {
             <div class="nb-task ${t.status}">
               <span class="nb-icon">${esc(t.icon || '·')}</span>
               <span class="nb-task-spec">${esc(t.spec)}</span>
-              <span class="nb-task-n">${t.status === 'skipped' ? '접음'
-                : t.target > 1 ? `${t.done}/${t.target}` : (t.done ? '✓' : '─')}</span>
+              <span class="nb-task-n">${nbMark(t)}</span>
+              ${t.status === 'open' ? `
+                <div class="nb-acts">
+                  <button class="btn-nb-done" data-act="done" data-task="${esc(t.id)}"
+                    >✍️ ${t.target > 1 ? '한 번 더 썼어요' : '썼어요'}</button>
+                  <button class="btn-nb-skip" data-act="skip" data-task="${esc(t.id)}"
+                    >접기</button>
+                </div>` : ''}
             </div>`).join('')}
         </div>`;
       }).join('')}
       <p class="hint" style="margin-top:14px">쓴 것 ${done || 0}개 · 남은 것 ${open || 0}개.
         진도를 막지는 않아요. 안 써도 다음 장면으로 갈 수 있습니다.</p>
     </div>`;
+  wireNotebook(renderNotebook);
 }
 
 /* ── 음성 인식 ── */

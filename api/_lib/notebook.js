@@ -86,7 +86,48 @@ const NOTEBOOK_MIGRATIONS = [
   // 📋 모범답안 — 수업이 과제를 낼 때 답도 같이 냅니다.
   //    비어 있으면 연습장에서 처음 펼칠 때 한 번만 만들어 여기 채워 넣습니다.
   `ALTER TABLE notebook_tasks ADD COLUMN IF NOT EXISTS answer_key TEXT NOT NULL DEFAULT ''`,
+  // 🕰 마지막으로 손댄 때. 자동으로 접을지 판단할 때 씁니다.
+  //    done_at은 '끝난 때'라 진행 중인 과제에는 안 찍힙니다.
+  `ALTER TABLE notebook_tasks ADD COLUMN IF NOT EXISTS touched_at TIMESTAMPTZ`,
 ];
+
+/**
+ * 📥 발행 상한 — 열린 과제가 이만큼 쌓이면 새 장을 끝내도 과제를 안 냅니다.
+ *
+ * 한 장을 끝낼 때마다 최대 4개가 들어오는데 회수는 하루 한 칸이었습니다.
+ * 들어오는 속도가 나가는 속도보다 구조적으로 빨라서 큐가 절대 안 비었고,
+ * 몇 주 전 과제가 매일 수업 맨 위에 붙어 있었습니다. 밀린 걸 먼저 소화하게 합니다.
+ */
+export const OPEN_CAP = 6;
+
+/** 🕰 이만큼 손 안 대면 조용히 접습니다. 안 쓴 걸 영원히 들고 있으면 부담만 됩니다. */
+export const STALE_DAYS = 21;
+
+/** 지금 열려 있는 과제 수 — 발행 상한을 재는 자 */
+export async function countOpenAll(userId, course) {
+  const pool = getPool(); if (!pool) return 0;
+  await ensureNotebookTables();
+  const r = await pool.query(
+    `SELECT COUNT(*)::int AS n FROM notebook_tasks
+      WHERE user_id=$1 AND course=$2 AND status='open'`, [userId, course]);
+  return r.rows[0]?.n || 0;
+}
+
+/**
+ * 🧹 오래 손 안 댄 과제를 접습니다. 'skipped'(본인이 접음)와 구분해 'expired'로 둡니다 —
+ * 안 한 것과 안 하기로 한 것은 다르고, 연습장에서는 여전히 답을 펼쳐볼 수 있어야 합니다.
+ * @returns 접힌 개수
+ */
+export async function sweepStale(userId, course) {
+  const pool = getPool(); if (!pool) return 0;
+  await ensureNotebookTables();
+  const r = await pool.query(
+    `UPDATE notebook_tasks SET status='expired'
+      WHERE user_id=$1 AND course=$2 AND status='open'
+        AND COALESCE(touched_at, issued_at) < NOW() - ($3 || ' days')::interval`,
+    [userId, course, String(STALE_DAYS)]).catch(() => ({ rowCount: 0 }));
+  return r.rowCount || 0;
+}
 
 /**
  * 결정적 ID — 같은 장의 같은 과제를 두 번 발행해도 늘어나지 않습니다.
@@ -106,6 +147,11 @@ export async function issueTasks(userId, course, chapter, tasks) {
   const pool = getPool();
   if (!pool || !Array.isArray(tasks) || !tasks.length) return 0;
   await ensureNotebookTables();
+
+  // 📥 밀린 게 이미 많으면 새로 내지 않습니다. 상한을 호출하는 쪽이 아니라
+  //    여기에 두는 이유는, 발행 지점이 늘어나도 빠뜨릴 수 없게 하기 위해서입니다.
+  if (await countOpenAll(userId, course) >= OPEN_CAP) return 0;
+
   let n = 0;
   for (const t of tasks.slice(0, 4)) {
     const spec = String(t?.spec || '').trim();
@@ -153,7 +199,8 @@ export async function bumpTask(userId, taskIdStr, by = 1) {
     `UPDATE notebook_tasks
         SET done = LEAST(target, done + $1),
             status  = CASE WHEN done + $1 >= target THEN 'done' ELSE status END,
-            done_at = CASE WHEN done + $1 >= target THEN NOW() ELSE done_at END
+            done_at = CASE WHEN done + $1 >= target THEN NOW() ELSE done_at END,
+            touched_at = NOW()
       WHERE id = $2 AND user_id = $3 AND status = 'open'
       RETURNING done, target, status`,
     [Math.max(1, Number(by) || 1), taskIdStr, userId]);

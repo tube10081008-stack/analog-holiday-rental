@@ -293,7 +293,8 @@ async function handleChinese(req, res, query, body) {
         stats: await CN.getChineseStats(),
         priorFocus: (await CN.getLastEvaluation())?.nextFocus || null,
         // 📓 지난 장면에서 낸 손글씨 과제 — 진도를 막지 않고 물어만 봅니다
-        notebookPending: await NB.getPending(uid, 'chinese', 3),
+        notebookPending: await NB.sweepStale(uid, 'chinese').then(() => NB.getPending(uid, 'chinese', 3)),
+        notebookOpen: await NB.countOpenAll(uid, 'chinese'),
       });
     }
 
@@ -428,6 +429,8 @@ async function handleChinese(req, res, query, body) {
         ok: true, evaluation, cardsAdded: added, lessonXp,
         xpEarnedNote: score >= 70 ? null : '70점 이상부터 XP가 적립됩니다.',
         notebookIssued, notebookTasks: await NB.getPending(uid, 'chinese', 3),
+        // 밀려서 안 냈는지 화면이 설명할 수 있게
+        notebookOpen: await NB.countOpenAll(uid, 'chinese'), notebookCap: NB.OPEN_CAP,
         cardStats: await CN.getCardStats(), stats: await CN.getChineseStats(),
         xp: await CN.getXpState(),
       });
@@ -633,7 +636,9 @@ async function handleRoom(req, res, query, body, me, ROOM) {
         },
         stats: await GE.getStats(uid), xp: await GE.getXpState(uid),
         gaps: await GE.getGaps(uid, 5),
-        notebookPending: await NB.getPending(uid, course, 3),
+        // 🧹 오래 손 안 댄 과제를 먼저 접습니다. 하루 한 번(수업 펼칠 때) 도는 자리입니다.
+        notebookPending: await NB.sweepStale(uid, course).then(() => NB.getPending(uid, course, 3)),
+        notebookOpen: await NB.countOpenAll(uid, course),
         partnerCount: partners.length,
         unseenNotes: await TG.unseenCount(uid, course),
       });
@@ -869,6 +874,7 @@ async function handleRoom(req, res, query, body, me, ROOM) {
       return json(res, 200, {
         ok: true, cardsAdded, xpGained, notebookIssued,
         notebookTasks: await NB.getPending(uid, course, 4),
+        notebookOpen: await NB.countOpenAll(uid, course), notebookCap: NB.OPEN_CAP,
         stats: await GE.getStats(uid), xp: await GE.getXpState(uid),
       });
     }
